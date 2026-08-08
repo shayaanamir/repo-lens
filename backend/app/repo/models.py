@@ -23,7 +23,7 @@ class Repository(Base):
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-
+    jobs = relationship("Job", back_populates="repository", cascade="all, delete-orphan")
     files: Mapped[list["File"]] = relationship(back_populates="repository")
 
 

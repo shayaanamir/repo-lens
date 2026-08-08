@@ -17,6 +17,7 @@ sys.path.append(os.getcwd())
 from app.core.config import settings
 from app.core.db import Base
 from app.repo.models import Repository, File  # noqa: F401
+from app.jobs.models import Job
 
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
