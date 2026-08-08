@@ -1,0 +1,4 @@
+project-includes = ["backend/**/*.py"]
+project-excludes = ["**/.venv/**", "**/node_modules/**", "**/__pycache__/**"]
+search-path = ["backend"]
+site-package-path = ["backend/.venv/Lib/site-packages"]
