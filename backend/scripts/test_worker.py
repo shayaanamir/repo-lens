@@ -1,18 +1,27 @@
 import asyncio
 import uuid
 
+from sqlalchemy import delete
+
 from app.core.db import async_session_factory
 from app.repo.models import Repository
 from app.jobs.queue import enqueue_indexing_pipeline
 
+REAL_TEST_URL = "https://github.com/octocat/Hello-World"
+
 
 async def main():
     async with async_session_factory() as db:
-        unique_suffix = uuid.uuid4().hex[:8]
+        # Clean up any prior test run using this same URL, so this
+        # script stays re-runnable without manual DB cleanup. Cascades
+        # to jobs automatically via ondelete='CASCADE'.
+        await db.execute(delete(Repository).where(Repository.github_url == REAL_TEST_URL))
+        await db.commit()
+
         repo = Repository(
             id=uuid.uuid4(),
-            github_url=f"https://github.com/octocat/Hello-World-{unique_suffix}",
-            name=f"Hello-World-{unique_suffix}",
+            github_url=REAL_TEST_URL,
+            name=f"Hello-World-{uuid.uuid4().hex[:8]}",
             default_branch="master",
             status="pending",
         )

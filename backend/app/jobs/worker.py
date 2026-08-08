@@ -8,6 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import async_session_factory
 from app.jobs.models import Job, JobStage, JobStatus
 
+from pathlib import Path
+
+from app.core.config import settings
+from app.repo.git_service import clone_repository, CloneError
+from app.repo.models import Repository
+
 logger = logging.getLogger(__name__)
 
 STAGE_ORDER = [JobStage.CLONE, JobStage.PARSE, JobStage.EMBED, JobStage.SUMMARIZE]
@@ -117,10 +123,40 @@ async def _execute_stage(job: Job) -> None:
     module (Repo, Analysis, Search, AI) becomes available in later phases.
     """
     if job.stage == JobStage.CLONE:
-        raise NotImplementedError("clone stage not yet wired up")
+        await _run_clone_stage(job)
     elif job.stage == JobStage.PARSE:
         raise NotImplementedError("parse stage not yet wired up")
     elif job.stage == JobStage.EMBED:
         raise NotImplementedError("embed stage not yet wired up")
     elif job.stage == JobStage.SUMMARIZE:
         raise NotImplementedError("summarize stage not yet wired up")
+
+
+async def _run_clone_stage(job: Job) -> None:
+    """
+    Clones the job's repository into a deterministic, repository_id-keyed
+    directory under settings.repo_storage_dir. Later stages (parse) can
+    recompute this same path from repository_id alone, so we don't need
+    to persist the clone path anywhere.
+    """
+    dest_dir = Path(settings.repo_storage_dir) / str(job.repository_id)
+
+    async with async_session_factory() as db:
+        repo = await db.get(Repository, job.repository_id)
+        if repo is None:
+            raise RuntimeError(f"Repository {job.repository_id} not found")
+        github_url = repo.github_url
+
+    try:
+        cloned = await asyncio.to_thread(
+            clone_repository, github_url, dest_dir
+        )
+    except CloneError as exc:
+        # Let this propagate — _run_stage's try/except will catch it,
+        # mark the job FAILED, and store str(exc) as job.error.
+        raise
+
+    logger.info(
+        "Cloned repository %s (%d bytes) to %s",
+        job.repository_id, cloned.size_bytes, cloned.path,
+    )
