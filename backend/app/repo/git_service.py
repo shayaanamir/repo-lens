@@ -24,18 +24,25 @@ class ClonedRepo:
 
 def clone_repository(
     github_url: str,
+    dest_dir: Path | str | None = None,
     timeout_seconds: int = DEFAULT_CLONE_TIMEOUT_SECONDS,
     max_size_bytes: int = DEFAULT_MAX_REPO_SIZE_BYTES,
 ) -> ClonedRepo:
     """
-    Shallow-clones a public GitHub repository into an isolated temp
-    directory. Caller is responsible for calling cleanup_clone() once
-    done reading the files (e.g. after parsing/indexing finishes).
+    Shallow-clones a public GitHub repository.
 
-    Raises CloneError on timeout, git failure, or if the cloned repo
-    exceeds max_size_bytes.
+    If dest_dir is given, clones there (creating parent directories as
+    needed) — used for persistent, long-lived clones. If omitted, clones
+    into a fresh system temp directory — used for tests/one-off inspection.
+
+    Caller is responsible for calling cleanup_clone() when using the
+    temp-dir mode. Persistent clones (dest_dir given) are NOT auto-cleaned.
     """
-    dest = Path(tempfile.mkdtemp(prefix="repolens-clone-"))
+    if dest_dir is not None:
+        dest = Path(dest_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+    else:
+        dest = Path(tempfile.mkdtemp(prefix="repolens-clone-"))
 
     command = [
         "git", "clone",

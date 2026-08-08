@@ -20,7 +20,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.log
-
+backend/data/
 # Alembic — keep migration scripts, ignore nothing special here,
 # but never commit a local sqlite fallback if one gets created
 *.sqlite3

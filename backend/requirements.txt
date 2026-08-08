@@ -29,7 +29,6 @@ pydantic==2.13.4
 pydantic-settings==2.14.2
 pydantic_core==2.46.4
 python-dotenv==1.2.2
-pywin32==312
 PyYAML==6.0.3
 qdrant-client==1.19.0
 smmap==5.0.3
