@@ -17,7 +17,8 @@ class Repository(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     default_branch: Mapped[str] = mapped_column(String(255), default="main")
     status: Mapped[str] = mapped_column(String(50), default="pending")
-    # pending | indexing | ready | failed
+    primary_language: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    readme_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
