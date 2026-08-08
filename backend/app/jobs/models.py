@@ -37,7 +37,7 @@ class Job(Base):
         String(20), nullable=False, default=JobStatus.PENDING
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-
+    retry_count: Mapped[int] = mapped_column(nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

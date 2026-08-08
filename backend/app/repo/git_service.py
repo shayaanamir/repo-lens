@@ -15,6 +15,10 @@ class CloneError(Exception):
     (timeout, git error, or the repo exceeding the size limit)."""
     pass
 
+class CloneTimeoutError(CloneError):
+    """Raised specifically when the clone times out — a transient
+    failure that may succeed on retry, unlike other CloneErrors."""
+    pass
 
 @dataclass
 class ClonedRepo:
@@ -63,7 +67,7 @@ def clone_repository(
         )
     except subprocess.TimeoutExpired as e:
         shutil.rmtree(dest, ignore_errors=True)
-        raise CloneError(
+        raise CloneTimeoutError(
             f"git clone timed out after {timeout_seconds}s for {github_url}"
         ) from e
     except subprocess.CalledProcessError as e:

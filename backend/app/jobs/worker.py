@@ -11,7 +11,7 @@ from app.jobs.models import Job, JobStage, JobStatus
 from pathlib import Path
 
 from app.core.config import settings
-from app.repo.git_service import clone_repository, CloneError
+from app.repo.git_service import clone_repository, CloneError, CloneTimeoutError
 from app.repo.models import Repository
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 STAGE_ORDER = [JobStage.CLONE, JobStage.PARSE, JobStage.EMBED, JobStage.SUMMARIZE]
 
 POLL_INTERVAL_SECONDS = 5
+
+
+MAX_RETRIES = 3
+RETRYABLE_EXCEPTIONS = (CloneTimeoutError,)
 
 
 async def run_worker_loop() -> None:
@@ -103,12 +107,26 @@ async def _run_stage(db: AsyncSession, job: Job) -> None:
     try:
         await _execute_stage(job)
     except Exception as exc:
-        logger.exception(
-            "Job %s (stage=%s, repo=%s) failed", job.id, job.stage, job.repository_id
-        )
-        job.status = JobStatus.FAILED
-        job.error = str(exc)
-        job.completed_at = datetime.now(timezone.utc)
+        is_retryable = isinstance(exc, RETRYABLE_EXCEPTIONS)
+        can_retry = is_retryable and job.retry_count < MAX_RETRIES
+
+        if can_retry:
+            job.retry_count += 1
+            job.status = JobStatus.PENDING
+            job.error = str(exc)
+            job.started_at = None
+            logger.warning(
+                "Job %s (stage=%s) failed transiently (attempt %d/%d), will retry: %s",
+                job.id, job.stage, job.retry_count, MAX_RETRIES, exc,
+            )
+        else:
+            job.status = JobStatus.FAILED
+            job.error = str(exc)
+            job.completed_at = datetime.now(timezone.utc)
+            logger.exception(
+                "Job %s (stage=%s, repo=%s) failed permanently",
+                job.id, job.stage, job.repository_id,
+            )
         await db.commit()
         return
 
