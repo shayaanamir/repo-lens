@@ -1,8 +1,25 @@
+from contextlib import asynccontextmanager
+import asyncio
+
 from fastapi import FastAPI
 
 from app.repo.router import router as repo_router
+from app.jobs.worker import run_worker_loop
+import logging
+logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="RepoLens")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    worker_task = asyncio.create_task(run_worker_loop())
+    yield
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
+
+
+app = FastAPI(title="RepoLens", lifespan=lifespan)
 
 app.include_router(repo_router)
 
