@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.db import Base
 from app.repo.models import Repository, File  # noqa: F401
 from app.jobs.models import Job
+from app.analysis.models import Symbol, ImportEdge  # noqa: F401
 
 config.set_main_option("sqlalchemy.url", settings.database_url)
 

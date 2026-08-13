@@ -42,3 +42,4 @@ class File(Base):
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     repository: Mapped["Repository"] = relationship(back_populates="files")
+    symbols: Mapped[list["Symbol"]] = relationship(back_populates="file", cascade="all, delete-orphan")
