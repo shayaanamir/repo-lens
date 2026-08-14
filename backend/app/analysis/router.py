@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.analysis.graph_service import build_dependency_graph
+from app.analysis import graph_service
 from app.analysis.schemas import DependencyGraphOut
 from app.core.db import get_db
 from app.repo.models import Repository
@@ -19,7 +19,7 @@ async def get_dependency_graph(
     if repository is None:
         raise HTTPException(status_code=404, detail="Repository not found")
 
-    graph = await build_dependency_graph(db, repository_id)
+    graph = await graph_service.build_dependency_graph(db, repository_id)
 
     return DependencyGraphOut(
         nodes=[
