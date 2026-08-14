@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from app.repo.router import router as repo_router
 from app.jobs.worker import run_worker_loop
 from app.jobs.router import router as jobs_router
+from app.analysis.router import router as analysis_router
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -24,9 +25,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="RepoLens", lifespan=lifespan)
 
 app.include_router(repo_router)
-
-
 app.include_router(jobs_router)
+app.include_router(analysis_router)
 
 @app.get("/health")
 def health():
