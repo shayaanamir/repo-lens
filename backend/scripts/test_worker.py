@@ -6,8 +6,9 @@ from sqlalchemy import delete
 from app.core.db import async_session_factory
 from app.repo.models import Repository
 from app.jobs.queue import enqueue_indexing_pipeline
+from app.analysis.models import Symbol, ImportEdge  # noqa: F401
 
-REAL_TEST_URL = "https://github.com/octocat/Hello-World"
+REAL_TEST_URL = "https://github.com/pallets/flask"
 
 
 async def main():

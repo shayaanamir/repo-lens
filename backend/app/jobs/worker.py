@@ -13,6 +13,7 @@ from pathlib import Path
 from app.core.config import settings
 from app.repo.git_service import clone_repository, CloneError, CloneTimeoutError
 from app.repo.models import Repository
+from app.analysis.service import analyze_repository
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +144,7 @@ async def _execute_stage(job: Job) -> None:
     if job.stage == JobStage.CLONE:
         await _run_clone_stage(job)
     elif job.stage == JobStage.PARSE:
-        raise NotImplementedError("parse stage not yet wired up")
+        await _run_parse_stage(job)
     elif job.stage == JobStage.EMBED:
         raise NotImplementedError("embed stage not yet wired up")
     elif job.stage == JobStage.SUMMARIZE:
@@ -178,3 +179,17 @@ async def _run_clone_stage(job: Job) -> None:
         "Cloned repository %s (%d bytes) to %s",
         job.repository_id, cloned.size_bytes, cloned.path,
     )
+
+async def _run_parse_stage(job: Job) -> None:
+    """
+    Runs static analysis (Tree-sitter symbol extraction + import
+    resolution) over the repository's already-cloned files on disk,
+    and persists symbols/import edges to Postgres.
+
+    Reuses the same deterministic, repository_id-keyed directory the
+    clone stage wrote to — no need to look anything up.
+    """
+    repo_dir = Path(settings.repo_storage_dir) / str(job.repository_id)
+
+    async with async_session_factory() as db:
+        await analyze_repository(db, job.repository_id, repo_dir)

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+import hashlib
 
 # Common directories that don't represent "real" source content and
 # would otherwise skew file counts / language detection.
@@ -120,3 +121,32 @@ def _is_in_ignored_dir(path: Path, repo_root: Path) -> bool:
     IGNORED_DIRS (e.g. skips anything under .git/ or node_modules/)."""
     relative = path.relative_to(repo_root)
     return any(part in IGNORED_DIRS for part in relative.parts[:-1])
+
+def scan_files(repo_path: Path) -> list[dict]:
+    """Walks a cloned repo and builds one record per file for the
+    `file` table: relative path, detected language, size, content hash.
+    Shared by both the synchronous import path (repo/service.py) and
+    the background analysis job stage (analysis/service.py)."""
+    records = []
+    for path in repo_path.rglob("*"):
+        if not path.is_file():
+            continue
+
+        relative = path.relative_to(repo_path)
+        if any(part in IGNORED_DIRS for part in relative.parts[:-1]):
+            continue
+
+        try:
+            content_bytes = path.read_bytes()
+        except OSError:
+            continue  # skip unreadable files rather than failing the whole scan
+
+        records.append(
+            {
+                "path": relative.as_posix(),  # forward slashes even on Windows
+                "language": EXTENSION_LANGUAGE_MAP.get(path.suffix.lower()),
+                "size": len(content_bytes),
+                "content_hash": hashlib.sha256(content_bytes).hexdigest(),
+            }
+        )
+    return records
