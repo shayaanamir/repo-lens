@@ -5,6 +5,12 @@ from typing import Protocol
 DEFAULT_WINDOW_LINES = 40
 DEFAULT_OVERLAP_LINES = 5
 
+# Hard ceiling on a single chunk's character length. Gemini's embedding
+# model has its own input token limit regardless of our rate budget, and
+# an oversized chunk (e.g. a huge generated class) also blows out the
+# token-throttle's per-batch estimate. Truncate rather than skip, so the
+# chunk still contributes *something* searchable.
+MAX_CHUNK_CHARS = 6000
 
 class SymbolLike(Protocol):
     """Structural type for anything with symbol-shaped fields — lets the
@@ -76,7 +82,8 @@ def _chunk_by_symbol(
         body = "\n".join(lines[start - 1 : end])
         if not body.strip():
             continue
-
+        if len(body) > MAX_CHUNK_CHARS:
+            body = body[:MAX_CHUNK_CHARS]
         chunks.append(
             ChunkRecord(
                 file_id=file_id,
@@ -112,6 +119,8 @@ def _chunk_by_window(
         body = "\n".join(lines[start:end])
 
         if body.strip():
+            if len(body) > MAX_CHUNK_CHARS:
+                body = body[:MAX_CHUNK_CHARS]
             chunks.append(
                 ChunkRecord(
                     file_id=file_id,

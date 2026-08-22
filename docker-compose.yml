@@ -31,6 +31,7 @@ services:
       - qdrant
     volumes:
       - ./backend:/app
+      - huggingface_cache:/root/.cache/huggingface
 
   frontend:
     build: ./frontend
@@ -45,3 +46,4 @@ services:
 volumes:
   pgdata:
   qdrantdata:
+  huggingface_cache:

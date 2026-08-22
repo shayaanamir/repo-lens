@@ -14,6 +14,8 @@ from app.core.config import settings
 from app.repo.git_service import clone_repository, CloneError, CloneTimeoutError
 from app.repo.models import Repository
 from app.analysis.service import analyze_repository
+from app.analysis.service import analyze_repository
+from app.search.service import embed_repository
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +148,7 @@ async def _execute_stage(job: Job) -> None:
     elif job.stage == JobStage.PARSE:
         await _run_parse_stage(job)
     elif job.stage == JobStage.EMBED:
-        raise NotImplementedError("embed stage not yet wired up")
+        await _run_embed_stage(job)
     elif job.stage == JobStage.SUMMARIZE:
         raise NotImplementedError("summarize stage not yet wired up")
 
@@ -193,3 +195,14 @@ async def _run_parse_stage(job: Job) -> None:
 
     async with async_session_factory() as db:
         await analyze_repository(db, job.repository_id, repo_dir)
+
+async def _run_embed_stage(job: Job) -> None:
+    """
+    Chunks + embeds the repository's already-analyzed files and writes
+    vectors to Qdrant. Reuses the same deterministic repository_id-keyed
+    directory the clone/parse stages already worked against.
+    """
+    repo_dir = Path(settings.repo_storage_dir) / str(job.repository_id)
+
+    async with async_session_factory() as db:
+        await embed_repository(db, job.repository_id, repo_dir)
