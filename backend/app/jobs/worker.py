@@ -16,6 +16,8 @@ from app.repo.models import Repository
 from app.analysis.service import analyze_repository
 from app.analysis.service import analyze_repository
 from app.search.service import embed_repository
+from app.ai.errors import AIUnavailableError
+from app.ai.summary_service import generate_repository_summary
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +152,7 @@ async def _execute_stage(job: Job) -> None:
     elif job.stage == JobStage.EMBED:
         await _run_embed_stage(job)
     elif job.stage == JobStage.SUMMARIZE:
-        raise NotImplementedError("summarize stage not yet wired up")
+        await _run_summarize_stage(job)
 
 
 async def _run_clone_stage(job: Job) -> None:
@@ -206,3 +208,27 @@ async def _run_embed_stage(job: Job) -> None:
 
     async with async_session_factory() as db:
         await embed_repository(db, job.repository_id, repo_dir)
+
+
+async def _run_summarize_stage(job: Job) -> None:
+    """
+    Generates a one-time repository summary via the AI Module and marks
+    the repository ready. A Gemini failure here is non-fatal to the
+    pipeline (PROJECT.md §6.2, 'AI is an enhancement'): the summarize
+    job itself still ends up FAILED so it's visible in job status, but
+    the repository still becomes browsable/searchable without a summary.
+    """
+    async with async_session_factory() as db:
+        repo = await db.get(Repository, job.repository_id)
+        if repo is None:
+            raise RuntimeError(f"Repository {job.repository_id} not found")
+
+        try:
+            repo.summary = await generate_repository_summary(db, job.repository_id)
+        except AIUnavailableError:
+            repo.status = "ready"
+            await db.commit()
+            raise  # let _run_stage record the job itself as FAILED
+
+        repo.status = "ready"
+        await db.commit()

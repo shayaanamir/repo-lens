@@ -9,6 +9,7 @@ from app.jobs.router import router as jobs_router
 from app.analysis.router import router as analysis_router
 from app.search.qdrant_client import ensure_collection
 from app.search.router import router as search_router
+from app.ai.router import router as ai_router
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -31,6 +32,7 @@ app.include_router(repo_router)
 app.include_router(jobs_router)
 app.include_router(analysis_router)
 app.include_router(search_router)
+app.include_router(ai_router)
 
 @app.get("/health")
 def health():

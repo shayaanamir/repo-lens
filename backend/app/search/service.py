@@ -69,6 +69,7 @@ async def embed_repository(db: AsyncSession, repository_id: uuid.UUID, repo_dir:
                 "end_line": chunk.end_line,
                 "symbol_name": chunk.symbol_name,
                 "symbol_kind": chunk.symbol_kind,
+                "content": chunk.content,
             },
         )
         for chunk, vector in zip(chunks, vectors)
