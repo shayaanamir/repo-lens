@@ -56,6 +56,8 @@
   --color-rl-signal: var(--rl-signal);
   --color-rl-danger: var(--rl-danger);
   --color-rl-danger-bg: var(--rl-danger-bg);
+  --color-rl-utility: var(--rl-utility);
+  --color-rl-test: var(--rl-test);
 }
 
 :root {
@@ -100,6 +102,8 @@
   --rl-signal: #B8650F;
   --rl-danger: #C4342B;
   --rl-danger-bg: #FBEAE8;
+  --rl-utility: #2B5FAE;
+  --rl-test: #B23A63;
 }
 
 .dark {
@@ -143,6 +147,8 @@
   --rl-signal: #F2A93C;
   --rl-danger: #F2555C;
   --rl-danger-bg: rgba(242, 85, 92, 0.08);
+  --rl-utility: #6FA8FF;
+  --rl-test: #F26FA0;
 }
 
 @layer base {

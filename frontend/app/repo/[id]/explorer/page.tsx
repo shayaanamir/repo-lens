@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import Editor from "@monaco-editor/react";
@@ -68,6 +69,9 @@ export default function RepositoryExplorer() {
     const [contentLoading, setContentLoading] = useState(false);
     const [contentError, setContentError] = useState<string | null>(null);
 
+    const searchParams = useSearchParams();
+    const initialFile = searchParams.get("file");
+
     useEffect(() => {
         if (!repositoryId) return;
         let cancelled = false;
@@ -81,6 +85,12 @@ export default function RepositoryExplorer() {
                 if (cancelled) return;
                 setRepo(repoData);
                 setFiles(fileData);
+                if (initialFile) {
+                    const match = fileData.find((f) => f.path === initialFile);
+                    if (match) {
+                        handleSelect({ name: match.path.split("/").pop() ?? match.path, path: match.path, type: "file", file: match });
+                    }
+                }
             } catch (err) {
                 if (cancelled) return;
                 setLoadError(err instanceof ApiError ? err.detail : "Couldn't load this repository.");
