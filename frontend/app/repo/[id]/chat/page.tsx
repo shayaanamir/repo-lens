@@ -13,6 +13,7 @@ import {
     type Repository,
     type SourceRef,
 } from "@/lib/api-client";
+import { MarkdownContent } from "@/components/markdown-content";
 
 interface ChatMessage {
     id: string;
@@ -174,7 +175,7 @@ function MessageBubble({
     return (
         <div className="flex justify-start">
             <div className="max-w-[85%] rounded-lg rounded-bl-sm border border-rl-border bg-rl-surface px-4 py-2.5">
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-rl-text">{message.content}</p>
+                <MarkdownContent content={message.content} />
                 {message.sources && message.sources.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1.5 border-t border-rl-border pt-2.5">
                         {message.sources.map((s, i) => (

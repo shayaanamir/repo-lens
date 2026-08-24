@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import Editor from "@monaco-editor/react";
+import { MarkdownContent } from "@/components/markdown-content";
 import {
     ArrowLeft,
     Check,
@@ -300,9 +301,7 @@ export default function RepositoryExplorer() {
                             </p>
                         ) : explanation ? (
                             <div>
-                                <p className="whitespace-pre-wrap text-sm leading-relaxed text-rl-text">
-                                    {explanation}
-                                </p>
+                                <MarkdownContent content={explanation} />
 
                                 {explanationSources.length > 0 && (
                                     <div className="mt-5">
