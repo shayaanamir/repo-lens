@@ -13,6 +13,7 @@ from pathlib import Path
 from app.core.config import settings
 from app.repo.git_service import clone_repository, CloneError, CloneTimeoutError
 from app.repo.models import Repository
+from app.repo.metadata_service import extract_metadata
 from app.analysis.service import analyze_repository
 from app.analysis.service import analyze_repository
 from app.search.service import embed_repository
@@ -158,9 +159,10 @@ async def _execute_stage(job: Job) -> None:
 async def _run_clone_stage(job: Job) -> None:
     """
     Clones the job's repository into a deterministic, repository_id-keyed
-    directory under settings.repo_storage_dir. Later stages (parse) can
-    recompute this same path from repository_id alone, so we don't need
-    to persist the clone path anywhere.
+    directory under settings.repo_storage_dir, then extracts and persists
+    README/primary-language metadata — this used to happen synchronously
+    in repo/service.py before the Jobs Module existed; it belongs here
+    now, since this is where the on-disk clone actually lives.
     """
     dest_dir = Path(settings.repo_storage_dir) / str(job.repository_id)
 
@@ -170,19 +172,23 @@ async def _run_clone_stage(job: Job) -> None:
             raise RuntimeError(f"Repository {job.repository_id} not found")
         github_url = repo.github_url
 
-    try:
-        cloned = await asyncio.to_thread(
-            clone_repository, github_url, dest_dir
-        )
-    except CloneError as exc:
-        # Let this propagate — _run_stage's try/except will catch it,
-        # mark the job FAILED, and store str(exc) as job.error.
-        raise
+    cloned = await asyncio.to_thread(clone_repository, github_url, dest_dir)
+
+    metadata = await asyncio.to_thread(extract_metadata, cloned.path)
+
+    async with async_session_factory() as db:
+        repo = await db.get(Repository, job.repository_id)
+        if repo is None:
+            raise RuntimeError(f"Repository {job.repository_id} not found")
+        repo.primary_language = metadata.primary_language
+        repo.readme_content = metadata.readme_content
+        await db.commit()
 
     logger.info(
         "Cloned repository %s (%d bytes) to %s",
         job.repository_id, cloned.size_bytes, cloned.path,
     )
+
 
 async def _run_parse_stage(job: Job) -> None:
     """
