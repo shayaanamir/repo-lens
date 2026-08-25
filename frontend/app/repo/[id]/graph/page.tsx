@@ -15,7 +15,6 @@ import {
 import "@xyflow/react/dist/style.css";
 import { ArrowLeft, Loader2, Minus, Plus, RotateCcw } from "lucide-react";
 
-import { AppHeader } from "@/components/app-header";
 import { FileNode, type FileNodeData } from "@/components/dependency-graph/file-node";
 import {
     categorizeNodes,
@@ -66,22 +65,18 @@ export default function DependencyGraphPage() {
 
     if (error) {
         return (
-            <div className="min-h-screen bg-rl-bg text-rl-text">
-                <AppHeader />
-                <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-6 text-center">
-                    <p className="font-[family-name:var(--font-display)] text-lg">Couldn't load graph</p>
-                    <p className="font-mono text-xs text-rl-text-dim">{error}</p>
-                    <Link href="/" className="mt-2 font-mono text-xs text-rl-trace underline underline-offset-4">
-                        ← back home
-                    </Link>
-                </div>
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                <p className="font-[family-name:var(--font-display)] text-lg">Couldn't load graph</p>
+                <p className="font-mono text-xs text-rl-text-dim">{error}</p>
+                <Link href="/" className="mt-2 font-mono text-xs text-rl-trace underline underline-offset-4">
+                    ← back home
+                </Link>
             </div>
         );
     }
 
     return (
-        <div className="flex h-screen flex-col bg-rl-bg text-rl-text">
-            <AppHeader />
+        <div className="flex flex-1 flex-col overflow-hidden">
             <div className="flex items-center gap-2 border-b border-rl-border px-6 py-2.5">
                 <Link
                     href={`/repo/${repositoryId}`}

@@ -36,3 +36,36 @@ class FileOut(BaseModel):
 class FileContentOut(BaseModel):
     path: str
     content: str
+
+class StageStatOut(BaseModel):
+    stage: str
+    status: str
+    detail: str | None
+
+
+class LanguageStatOut(BaseModel):
+    language: str
+    percentage: float
+
+
+class ModuleStatOut(BaseModel):
+    path: str
+    symbol_count: int
+    in_degree: int
+    out_degree: int
+    start_line: int | None
+    end_line: int | None
+
+
+class RepositoryStatsOut(BaseModel):
+    file_count: int
+    total_size_bytes: int
+    symbol_count: int
+    edge_count: int
+    chunk_count: int
+    vector_dim: int
+    languages: list[LanguageStatOut]
+    stages: list[StageStatOut]
+    modules: list[ModuleStatOut]
+    completed_at: datetime | None
+    duration_seconds: float | None

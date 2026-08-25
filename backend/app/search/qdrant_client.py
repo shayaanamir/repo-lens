@@ -106,6 +106,25 @@ async def delete_repository_vectors(repository_id: uuid.UUID) -> None:
     )
 
 
+async def count_repository_vectors(repository_id: uuid.UUID) -> int:
+    """Returns the number of chunks indexed for a repository — used by
+    the dashboard's 'extracted facts' stats, not on any hot path."""
+    client = get_qdrant_client()
+    result = await client.count(
+        collection_name=settings.qdrant_collection_name,
+        count_filter=models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="repository_id",
+                    match=models.MatchValue(value=str(repository_id)),
+                )
+            ]
+        ),
+        exact=True,
+    )
+    return result.count
+
+
 async def search_chunks(
     repository_id: uuid.UUID,
     query_vector: list[float],

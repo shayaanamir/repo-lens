@@ -209,3 +209,41 @@ export function explainFile(id: string, path: string): Promise<ExplainResponse> 
         method: "POST",
     });
 }
+
+export interface LanguageStat {
+    language: string;
+    percentage: number;
+}
+
+export interface StageStat {
+    stage: JobStage;
+    status: JobStatus;
+    detail: string | null;
+}
+
+export interface ModuleStat {
+    path: string;
+    symbol_count: number;
+    in_degree: number;
+    out_degree: number;
+    start_line: number | null;
+    end_line: number | null;
+}
+
+export interface RepositoryStats {
+    file_count: number;
+    total_size_bytes: number;
+    symbol_count: number;
+    edge_count: number;
+    chunk_count: number;
+    vector_dim: number;
+    languages: LanguageStat[];
+    stages: StageStat[];
+    modules: ModuleStat[];
+    completed_at: string | null;
+    duration_seconds: number | null;
+}
+
+export function getRepositoryStats(id: string): Promise<RepositoryStats> {
+    return request<RepositoryStats>(`/repositories/${id}/stats`);
+}

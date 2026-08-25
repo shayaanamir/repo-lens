@@ -7,19 +7,17 @@ import {
     CheckCircle2,
     Circle,
     ExternalLink,
-    FileCode2,
     Loader2,
-    MessageSquare,
-    Network,
-    Search,
+    Sparkles,
     XCircle,
 } from "lucide-react";
 
-import { AppHeader } from "@/components/app-header";
 import {
     getRepository,
+    getRepositoryStats,
     ApiError,
     type Repository,
+    type RepositoryStats,
     type Job,
     type JobStage,
     type JobStatus,
@@ -42,6 +40,7 @@ export default function RepositoryDashboard() {
     const [repo, setRepo] = useState<Repository | null>(null);
     const [repoError, setRepoError] = useState<string | null>(null);
     const [repoLoading, setRepoLoading] = useState(true);
+    const [stats, setStats] = useState<RepositoryStats | null>(null);
 
     const {
         jobs,
@@ -74,29 +73,40 @@ export default function RepositoryDashboard() {
         };
     }, [repositoryId]);
 
+    useEffect(() => {
+        if (!repositoryId || repo?.status !== "ready") return;
+        let cancelled = false;
+        getRepositoryStats(repositoryId)
+            .then((data) => {
+                if (!cancelled) setStats(data);
+            })
+            .catch(() => {
+                // stats are supplementary — a failure here shouldn't block the dashboard
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [repositoryId, repo?.status]);
+
     if (repoLoading) {
         return (
-            <Page>
-                <Centered>
-                    <Loader2 className="h-5 w-5 animate-spin text-rl-text-dim" />
-                </Centered>
-            </Page>
+            <Centered>
+                <Loader2 className="h-5 w-5 animate-spin text-rl-text-dim" />
+            </Centered>
         );
     }
 
     if (repoError || !repo) {
         return (
-            <Page>
-                <Centered>
-                    <p className="font-[family-name:var(--font-display)] text-lg text-rl-text">
-                        Repository not found
-                    </p>
-                    <p className="mt-1 font-mono text-xs text-rl-text-dim">{repoError}</p>
-                    <Link href="/" className="mt-6 font-mono text-xs text-rl-trace underline underline-offset-4">
-                        ← back to import a repository
-                    </Link>
-                </Centered>
-            </Page>
+            <Centered>
+                <p className="font-[family-name:var(--font-display)] text-lg text-rl-text">
+                    Repository not found
+                </p>
+                <p className="mt-1 font-mono text-xs text-rl-text-dim">{repoError}</p>
+                <Link href="/" className="mt-6 font-mono text-xs text-rl-trace underline underline-offset-4">
+                    ← back to import a repository
+                </Link>
+            </Centered>
         );
     }
 
@@ -104,44 +114,25 @@ export default function RepositoryDashboard() {
     const isReady = repo.status === "ready";
 
     return (
-        <Page>
-            <div className="mx-auto max-w-3xl px-6 py-12">
+        <div className="flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-6xl px-8 py-8">
                 <RepoHeader repo={repo} />
 
                 {isFailed && <FailedState jobs={jobs} fallbackError={jobsError} />}
-
                 {!isFailed && !isReady && <IndexingState jobs={jobs} jobsLoading={jobsLoading} />}
-
-                {!isFailed && isReady && <ReadyState repo={repo} />}
+                {!isFailed && isReady && <DashboardBody repo={repo} stats={stats} />}
             </div>
-        </Page>
-    );
-}
-
-// ---------------------------------------------------------------------
-// Layout helpers
-// ---------------------------------------------------------------------
-
-function Page({ children }: { children: React.ReactNode }) {
-    return (
-        <div className="min-h-screen bg-rl-bg text-rl-text">
-            <AppHeader />
-            {children}
         </div>
     );
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
     return (
-        <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
             {children}
         </div>
     );
 }
-
-// ---------------------------------------------------------------------
-// Header — name, url, language, imported date
-// ---------------------------------------------------------------------
 
 function RepoHeader({ repo }: { repo: Repository }) {
     const importedDate = new Date(repo.imported_at).toLocaleDateString(undefined, {
@@ -152,11 +143,7 @@ function RepoHeader({ repo }: { repo: Repository }) {
 
     return (
         <div className="border-b border-rl-border pb-6">
-            <Link href="/" className="font-mono text-xs text-rl-text-dim hover:text-rl-trace">
-                ← all repositories
-            </Link>
-
-            <div className="mt-3 flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
                 <h1 className="font-[family-name:var(--font-display)] text-3xl text-rl-text">
                     {repo.name}
                 </h1>
@@ -166,9 +153,9 @@ function RepoHeader({ repo }: { repo: Repository }) {
                     </span>
                 )}
             </div>
-
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-rl-text-dim">
-                <a href={repo.github_url}
+                <a
+                    href={repo.github_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 hover:text-rl-trace"
@@ -181,12 +168,12 @@ function RepoHeader({ repo }: { repo: Repository }) {
                 <span>·</span>
                 <span>{repo.status}</span>
             </div>
-        </div >
+        </div>
     );
 }
 
 // ---------------------------------------------------------------------
-// Indexing state — mirrors the landing page's pipeline strip, live
+// Indexing / failed states
 // ---------------------------------------------------------------------
 
 function IndexingState({ jobs, jobsLoading }: { jobs: Job[]; jobsLoading: boolean }) {
@@ -237,10 +224,6 @@ function StageIcon({ status }: { status: JobStatus }) {
     return <Circle className="h-4 w-4 text-rl-text-dim/40" />;
 }
 
-// ---------------------------------------------------------------------
-// Failed state
-// ---------------------------------------------------------------------
-
 function FailedState({ jobs, fallbackError }: { jobs: Job[]; fallbackError: string | null }) {
     const failedJob = jobs.find((j) => j.status === "failed");
 
@@ -263,113 +246,259 @@ function FailedState({ jobs, fallbackError }: { jobs: Job[]; fallbackError: stri
 }
 
 // ---------------------------------------------------------------------
-// Ready state
+// Ready state — the redesigned two-column dashboard
 // ---------------------------------------------------------------------
 
-function ReadyState({ repo }: { repo: Repository }) {
+function DashboardBody({ repo, stats }: { repo: Repository; stats: RepositoryStats | null }) {
     return (
-        <div className="space-y-10 py-8">
-            <section>
-                <p className="font-mono text-xs uppercase tracking-widest text-rl-text-dim">summary</p>
-                {repo.summary ? (
-                    <p className="mt-2 text-sm leading-relaxed text-rl-text">{repo.summary}</p>
-                ) : (
-                    <p className="mt-2 text-sm italic text-rl-text-dim">
-                        No AI summary available for this repository — everything else still works.
-                    </p>
-                )}
-            </section>
-
-            {repo.readme_content && <ReadmePreview content={repo.readme_content} />}
-
-            <section>
-                <p className="font-mono text-xs uppercase tracking-widest text-rl-text-dim">explore</p>
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <NavCard
-                        href={`/repo/${repo.id}/explorer`}
-                        icon={<FileCode2 className="h-5 w-5" />}
-                        title="Explorer"
-                        description="Browse the file tree and read source."
-                    />
-                    <NavCard
-                        href={`/repo/${repo.id}/graph`}
-                        icon={<Network className="h-5 w-5" />}
-                        title="Dependency Graph"
-                        description="See how files import one another."
-                    />
-                    <NavCard
-                        href={`/repo/${repo.id}/search`}
-                        icon={<Search className="h-5 w-5" />}
-                        title="Search"
-                        description="Find code by describing what it does."
-                    />
-                    <NavCard
-                        href={`/repo/${repo.id}/chat`}
-                        icon={<MessageSquare className="h-5 w-5" />}
-                        title="Chat"
-                        description="Ask questions, grounded in real source."
-                    />
-                </div>
-            </section>
+        <div className="grid grid-cols-1 gap-8 py-8 lg:grid-cols-[1fr_320px]">
+            <div className="space-y-8">
+                <SummaryCard repo={repo} stats={stats} />
+                <StartHere modules={stats?.modules ?? []} />
+                <ModulesTable modules={stats?.modules ?? []} repositoryId={repo.id} />
+            </div>
+            <div className="space-y-8">
+                <PipelineCard stats={stats} />
+                <ExtractedFacts stats={stats} />
+                <LanguagesCard stats={stats} />
+            </div>
         </div>
     );
 }
 
-function ReadmePreview({ content }: { content: string }) {
-    const [expanded, setExpanded] = useState(false);
-    const TRUNCATE_AT = 600;
-    const isLong = content.length > TRUNCATE_AT;
-    const shown = expanded || !isLong ? content : content.slice(0, TRUNCATE_AT) + "…";
+function SummaryCard({ repo, stats }: { repo: Repository; stats: RepositoryStats | null }) {
+    const groundedIn = (stats?.modules ?? []).slice(0, 3);
 
     return (
-        <section>
-            <p className="font-mono text-xs uppercase tracking-widest text-rl-text-dim">readme</p>
-            <div className="mt-2 overflow-hidden rounded-lg border border-rl-border bg-rl-surface">
-                <div className="border-b border-rl-border px-4 py-2">
-                    <span className="font-mono text-xs text-rl-text-dim">$ cat README.md</span>
-                </div>
-                <pre className="max-h-96 overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-xs leading-relaxed text-rl-text">
-                    {shown}
-                </pre>
+        <section className="rounded-lg border-l-2 border-rl-trace bg-rl-surface p-6">
+            <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-rl-trace">
+                <Sparkles className="h-3.5 w-3.5" />
+                Repository summary · generated once at index time
             </div>
-            {isLong && (
-                <button
-                    type="button"
-                    onClick={() => setExpanded((v) => !v)}
-                    className="mt-2 font-mono text-xs text-rl-trace underline underline-offset-4"
-                >
-                    {expanded ? "show less" : "show more"}
-                </button>
+
+            {repo.summary ? (
+                <p className="mt-4 text-[15px] leading-relaxed text-rl-text">{repo.summary}</p>
+            ) : (
+                <p className="mt-4 text-sm italic text-rl-text-dim">
+                    No AI summary available for this repository — everything else still works.
+                </p>
+            )}
+
+            {groundedIn.length > 0 && (
+                <div className="mt-5 border-t border-rl-border pt-4">
+                    <p className="font-mono text-[11px] uppercase tracking-widest text-rl-text-dim">
+                        ↳ grounded in
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {groundedIn.map((m) => (
+                            <Link
+                                key={m.path}
+                                href={`/repo/${repo.id}/explorer?file=${encodeURIComponent(m.path)}`}
+                                className="rounded border border-rl-border px-2.5 py-1 font-mono text-[11px] text-rl-text-dim hover:border-rl-trace hover:text-rl-trace"
+                            >
+                                {m.path}
+                                {m.start_line && m.end_line ? ` L${m.start_line}-${m.end_line}` : ""}
+                            </Link>
+                        ))}
+                    </div>
+                </div>
             )}
         </section>
     );
 }
 
-function NavCard({
-    href,
-    icon,
-    title,
-    description,
-}: {
-    href: string;
-    icon: React.ReactNode;
-    title: string;
-    description: string;
-}) {
+function describeModule(m: { in_degree: number; out_degree: number }): string {
+    if (m.in_degree === 0 && m.out_degree > 0) {
+        return `Entry point — imports ${m.out_degree} file${m.out_degree === 1 ? "" : "s"}, referenced by none in-repo`;
+    }
+    if (m.out_degree === 0 && m.in_degree > 0) {
+        return `Leaf module — referenced by ${m.in_degree} file${m.in_degree === 1 ? "" : "s"}, imports nothing else`;
+    }
+    return `Core module — referenced by ${m.in_degree}, imports ${m.out_degree}`;
+}
+
+function StartHere({ modules }: { modules: RepositoryStats["modules"] }) {
+    const top = modules.slice(0, 3);
+    if (top.length === 0) return null;
+
     return (
-        <Link
-            href={href}
-            className="group flex items-start gap-3 rounded-lg border border-rl-border bg-rl-surface p-4 transition-colors hover:border-rl-trace"
-        >
-            <span className="text-rl-text-dim transition-colors group-hover:text-rl-trace">
-                {icon}
-            </span>
-            <span>
-                <span className="block font-[family-name:var(--font-display)] text-sm text-rl-text">
-                    {title}
-                </span>
-                <span className="block font-mono text-xs text-rl-text-dim">{description}</span>
-            </span>
-        </Link>
+        <section>
+            <p className="font-mono text-xs uppercase tracking-widest text-rl-text-dim">start here</p>
+            <div className="mt-3 divide-y divide-rl-border border-y border-rl-border">
+                {top.map((m, i) => (
+                    <div key={m.path} className="flex items-start justify-between gap-4 py-4">
+                        <div className="flex gap-4">
+                            <span className="font-mono text-xs text-rl-signal">
+                                {String(i + 1).padStart(2, "0")}
+                            </span>
+                            <div>
+                                <p className="font-mono text-sm text-rl-text">{m.path}</p>
+                                <p className="mt-1 text-xs text-rl-text-dim">{describeModule(m)}</p>
+                            </div>
+                        </div>
+                        <span className="shrink-0 font-mono text-xs text-rl-text-dim">
+                            {m.in_degree + m.out_degree} refs
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </section>
+    );
+}
+
+function ModulesTable({
+    modules,
+    repositoryId,
+}: {
+    modules: RepositoryStats["modules"];
+    repositoryId: string;
+}) {
+    if (modules.length === 0) return null;
+
+    return (
+        <section>
+            <div className="flex items-center justify-between">
+                <p className="font-mono text-xs uppercase tracking-widest text-rl-text-dim">
+                    most referenced modules
+                </p>
+                <Link
+                    href={`/repo/${repositoryId}/graph`}
+                    className="font-mono text-xs text-rl-signal hover:underline"
+                >
+                    Open dependency graph
+                </Link>
+            </div>
+
+            <table className="mt-3 w-full border-collapse font-mono text-xs">
+                <thead>
+                    <tr className="border-b border-rl-border text-rl-text-dim">
+                        <th className="py-2 text-left font-normal">Path</th>
+                        <th className="py-2 text-right font-normal">Symbols</th>
+                        <th className="py-2 text-right font-normal">In</th>
+                        <th className="py-2 text-right font-normal">Out</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {modules.map((m) => (
+                        <tr key={m.path} className="border-b border-rl-border/60">
+                            <td className="py-2.5 text-rl-text">
+                                <Link
+                                    href={`/repo/${repositoryId}/explorer?file=${encodeURIComponent(m.path)}`}
+                                    className="hover:text-rl-trace"
+                                >
+                                    {m.path}
+                                </Link>
+                            </td>
+                            <td className="py-2.5 text-right text-rl-text-dim">{m.symbol_count}</td>
+                            <td className="py-2.5 text-right text-rl-text-dim">{m.in_degree}</td>
+                            <td className="py-2.5 text-right text-rl-text-dim">{m.out_degree}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </section>
+    );
+}
+
+function PipelineCard({ stats }: { stats: RepositoryStats | null }) {
+    return (
+        <section>
+            <p className="font-mono text-xs uppercase tracking-widest text-rl-text-dim">index pipeline</p>
+            <div className="mt-3 space-y-4">
+                {STAGE_ORDER.map((stage) => {
+                    const s = stats?.stages.find((x) => x.stage === stage);
+                    return (
+                        <div key={stage} className="flex items-start gap-2.5">
+                            {s?.status === "completed" ? (
+                                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-rl-signal" />
+                            ) : s?.status === "failed" ? (
+                                <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rl-danger" />
+                            ) : (
+                                <Circle className="mt-0.5 h-4 w-4 shrink-0 text-rl-text-dim/40" />
+                            )}
+                            <div>
+                                <p className="font-mono text-xs font-medium tracking-wide text-rl-text">
+                                    {STAGE_LABELS[stage].toUpperCase()}
+                                </p>
+                                <p className="mt-0.5 font-mono text-[11px] text-rl-text-dim">
+                                    {s?.detail ?? "—"}
+                                </p>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {stats?.completed_at && (
+                <p className="mt-4 border-t border-rl-border pt-3 font-mono text-[11px] text-rl-text-dim">
+                    Completed in {formatDuration(stats.duration_seconds)} ·{" "}
+                    {new Date(stats.completed_at).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                    })}
+                </p>
+            )}
+        </section>
+    );
+}
+
+function formatDuration(seconds: number | null): string {
+    if (seconds == null) return "—";
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function ExtractedFacts({ stats }: { stats: RepositoryStats | null }) {
+    const items = [
+        { label: "Files", value: stats?.file_count },
+        { label: "Symbols", value: stats?.symbol_count },
+        { label: "Edges", value: stats?.edge_count },
+        { label: "Chunks", value: stats?.chunk_count },
+    ];
+
+    return (
+        <section>
+            <p className="font-mono text-xs uppercase tracking-widest text-rl-text-dim">extracted facts</p>
+            <div className="mt-3 grid grid-cols-2 gap-4">
+                {items.map((item) => (
+                    <div key={item.label}>
+                        <p className="font-mono text-[11px] uppercase tracking-widest text-rl-text-dim">
+                            {item.label}
+                        </p>
+                        <p className="mt-1 font-[family-name:var(--font-display)] text-2xl text-rl-text">
+                            {item.value ?? "—"}
+                        </p>
+                    </div>
+                ))}
+            </div>
+        </section>
+    );
+}
+
+function LanguagesCard({ stats }: { stats: RepositoryStats | null }) {
+    const languages = stats?.languages ?? [];
+    if (languages.length === 0) return null;
+
+    return (
+        <section>
+            <p className="font-mono text-xs uppercase tracking-widest text-rl-text-dim">languages</p>
+            <div className="mt-3 space-y-3">
+                {languages.map((l) => (
+                    <div key={l.language}>
+                        <div className="flex items-center justify-between font-mono text-xs text-rl-text">
+                            <span>{l.language}</span>
+                            <span className="text-rl-text-dim">{l.percentage}%</span>
+                        </div>
+                        <div className="mt-1 h-1 overflow-hidden rounded-full bg-rl-border">
+                            <div className="h-full bg-rl-signal" style={{ width: `${l.percentage}%` }} />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </section>
     );
 }

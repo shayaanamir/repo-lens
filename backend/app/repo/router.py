@@ -9,8 +9,18 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.repo.git_service import CloneError
 from app.repo.models import File, Repository
-from app.repo.schemas import FileContentOut, FileOut, RepositoryCreate, RepositoryOut
+from app.repo.schemas import (
+    FileContentOut,
+    FileOut,
+    LanguageStatOut,
+    ModuleStatOut,
+    RepositoryCreate,
+    RepositoryOut,
+    RepositoryStatsOut,
+    StageStatOut,
+)
 from app.repo.service import RepositoryAlreadyExistsError, import_repository
+from app.repo.stats_service import get_repository_stats
 from app.repo.validators import InvalidRepoUrlError
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
@@ -78,3 +88,34 @@ async def get_file_content(
         raise HTTPException(status_code=500, detail=f"Could not read file: {e}") from e
 
     return FileContentOut(path=file_path, content=content)
+
+@router.get("/{repository_id}/stats", response_model=RepositoryStatsOut)
+async def get_repository_statistics(repository_id: UUID, db: AsyncSession = Depends(get_db)):
+    repository = await db.get(Repository, repository_id)
+    if repository is None:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    stats = await get_repository_stats(db, repository_id)
+    return RepositoryStatsOut(
+        file_count=stats.file_count,
+        total_size_bytes=stats.total_size_bytes,
+        symbol_count=stats.symbol_count,
+        edge_count=stats.edge_count,
+        chunk_count=stats.chunk_count,
+        vector_dim=stats.vector_dim,
+        languages=[LanguageStatOut(language=l.language, percentage=l.percentage) for l in stats.languages],
+        stages=[StageStatOut(stage=s.stage, status=s.status, detail=s.detail) for s in stats.stages],
+        modules=[
+            ModuleStatOut(
+                path=m.path,
+                symbol_count=m.symbol_count,
+                in_degree=m.in_degree,
+                out_degree=m.out_degree,
+                start_line=m.start_line,
+                end_line=m.end_line,
+            )
+            for m in stats.modules
+        ],
+        completed_at=stats.completed_at,
+        duration_seconds=stats.duration_seconds,
+    )

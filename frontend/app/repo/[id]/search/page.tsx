@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, Loader2, Search as SearchIcon } from "lucide-react";
 
-import { AppHeader } from "@/components/app-header";
 import {
     searchRepository,
     getFileContent,
@@ -53,8 +52,7 @@ export default function SearchPage() {
     }
 
     return (
-        <div className="min-h-screen bg-rl-bg text-rl-text">
-            <AppHeader />
+        <div className="flex flex-1 flex-col overflow-y-auto">
             <div className="flex items-center gap-2 border-b border-rl-border px-6 py-2.5">
                 <Link
                     href={`/repo/${repositoryId}`}

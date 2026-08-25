@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2, MessageSquare, Send } from "lucide-react";
 
-import { AppHeader } from "@/components/app-header";
 import {
     chatWithRepository,
     getRepository,
@@ -71,8 +70,7 @@ export default function ChatPage() {
     }
 
     return (
-        <div className="flex h-screen flex-col bg-rl-bg text-rl-text">
-            <AppHeader />
+        <div className="flex flex-1 flex-col overflow-hidden">
             <div className="flex items-center gap-2 border-b border-rl-border px-6 py-2.5">
                 <Link
                     href={`/repo/${repositoryId}`}
