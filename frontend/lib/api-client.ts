@@ -247,3 +247,21 @@ export interface RepositoryStats {
 export function getRepositoryStats(id: string): Promise<RepositoryStats> {
     return request<RepositoryStats>(`/repositories/${id}/stats`);
 }
+
+export interface RepositoryListItem {
+    id: string;
+    github_url: string;
+    name: string;
+    status: string;
+    primary_language: string | null;
+    imported_at: string;
+    file_count: number;
+}
+
+export function listRepositories(): Promise<RepositoryListItem[]> {
+    return request<RepositoryListItem[]>("/repositories");
+}
+
+export function deleteRepository(id: string): Promise<void> {
+    return request<void>(`/repositories/${id}`, { method: "DELETE" });
+}

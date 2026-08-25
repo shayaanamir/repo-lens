@@ -1,8 +1,9 @@
+import shutil
 from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -15,6 +16,7 @@ from app.repo.schemas import (
     LanguageStatOut,
     ModuleStatOut,
     RepositoryCreate,
+    RepositoryListItemOut,
     RepositoryOut,
     RepositoryStatsOut,
     StageStatOut,
@@ -22,6 +24,7 @@ from app.repo.schemas import (
 from app.repo.service import RepositoryAlreadyExistsError, import_repository
 from app.repo.stats_service import get_repository_stats
 from app.repo.validators import InvalidRepoUrlError
+from app.search.qdrant_client import delete_repository_vectors
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
@@ -40,6 +43,52 @@ async def create_repository(
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     return repository
+
+
+@router.get("", response_model=list[RepositoryListItemOut])
+async def list_repositories(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(
+            Repository.id,
+            Repository.github_url,
+            Repository.name,
+            Repository.status,
+            Repository.primary_language,
+            Repository.imported_at,
+            func.count(File.id).label("file_count"),
+        )
+        .outerjoin(File, File.repository_id == Repository.id)
+        .group_by(Repository.id)
+        .order_by(Repository.imported_at.desc())
+    )
+    return [
+        RepositoryListItemOut(
+            id=row.id,
+            github_url=row.github_url,
+            name=row.name,
+            status=row.status,
+            primary_language=row.primary_language,
+            imported_at=row.imported_at,
+            file_count=row.file_count,
+        )
+        for row in result.all()
+    ]
+
+
+@router.delete("/{repository_id}", status_code=204)
+async def delete_repository(repository_id: UUID, db: AsyncSession = Depends(get_db)):
+    repository = await db.get(Repository, repository_id)
+    if repository is None:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    # Postgres cascade only covers File/Job/Symbol/ImportEdge — Qdrant
+    # vectors and the on-disk clone live outside that, so clean them up
+    # explicitly (same gap noted in scripts/reset_repos.py).
+    await delete_repository_vectors(repository_id)
+    shutil.rmtree(Path(settings.repo_storage_dir) / str(repository_id), ignore_errors=True)
+
+    await db.delete(repository)
+    await db.commit()
 
 
 @router.get("/{repository_id}", response_model=RepositoryOut)

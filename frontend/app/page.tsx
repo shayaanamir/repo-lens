@@ -1,9 +1,18 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { createRepository, ApiError } from "@/lib/api-client";
+import Link from "next/link";
+import { ExternalLink, Loader2, Trash2 } from "lucide-react";
+import {
+  createRepository,
+  listRepositories,
+  deleteRepository,
+  ApiError,
+  type RepositoryListItem,
+} from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const EXAMPLE_REPOS = ["pallets/flask", "octocat/Hello-World", "tiangolo/fastapi"];
 
@@ -192,7 +201,7 @@ export default function Home() {
           </svg>
         </div>
       </section>
-
+      <RepositoryList />
       {/* ---------------------------------------------------------- */}
       {/* Pipeline strip — real sequence, so numbering is earned      */}
       {/* ---------------------------------------------------------- */}
@@ -258,5 +267,141 @@ export default function Home() {
         </p>
       </footer>
     </div>
+  );
+}
+
+function RepositoryList() {
+  const [repos, setRepos] = useState<RepositoryListItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      const data = await listRepositories();
+      setRepos(data);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Couldn't load your repositories.");
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function handleDelete(id: string, name: string) {
+    if (!window.confirm(`Delete "${name}"? This removes its indexed data and cannot be undone.`)) {
+      return;
+    }
+    setDeletingId(id);
+    try {
+      await deleteRepository(id);
+      setRepos((prev) => prev?.filter((r) => r.id !== id) ?? null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Couldn't delete this repository.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  if (repos === null && !error) {
+    return (
+      <section className="mx-auto max-w-5xl px-6 py-16">
+        <div className="flex items-center gap-2 font-[family-name:var(--font-mono)] text-xs text-[#8B98AC]">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          loading your repositories…
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="mx-auto max-w-5xl px-6 py-16">
+        <p className="font-[family-name:var(--font-mono)] text-xs text-[#F2555C]">{error}</p>
+      </section>
+    );
+  }
+
+  if (!repos || repos.length === 0) {
+    return null; // nothing imported yet — the hero form is invitation enough
+  }
+
+  return (
+    <section className="mx-auto max-w-5xl px-6 py-16">
+      <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-widest text-[#5FD3C4]">
+        Your repositories
+      </p>
+      <div className="mt-4 divide-y divide-[#1E2C40] overflow-hidden rounded-lg border border-[#1E2C40]">
+        {repos.map((repo) => (
+          <div
+            key={repo.id}
+            className="flex items-center justify-between gap-4 bg-[#121C2B] px-5 py-4 transition-colors hover:bg-[#16202F]"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="truncate font-[family-name:var(--font-display)] text-base text-[#ECE7D8]">
+                  {repo.name}
+                </span>
+                <StatusBadge status={repo.status} />
+                {repo.primary_language && (
+                  <span className="shrink-0 rounded-full border border-[#5FD3C4]/40 px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-[#5FD3C4]">
+                    {repo.primary_language}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 truncate font-[family-name:var(--font-mono)] text-xs text-[#8B98AC]">
+                {repo.github_url.replace("https://", "")} · {repo.file_count} files · imported{" "}
+                {new Date(repo.imported_at).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-3">
+              <Link
+                href={`/repo/${repo.id}`}
+                className="flex items-center gap-1 font-[family-name:var(--font-mono)] text-xs text-[#8B98AC] hover:text-[#5FD3C4]"
+              >
+                Open
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => handleDelete(repo.id, repo.name)}
+                disabled={deletingId === repo.id}
+                aria-label={`Delete ${repo.name}`}
+                className="rounded p-1.5 text-[#8B98AC] transition-colors hover:bg-[#F2555C]/10 hover:text-[#F2555C] disabled:opacity-50"
+              >
+                {deletingId === repo.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    ready: "border-[#5FD3C4]/40 text-[#5FD3C4]",
+    pending: "border-[#F2A93C]/40 text-[#F2A93C]",
+    failed: "border-[#F2555C]/40 text-[#F2555C]",
+  };
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-full border px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wide",
+        styles[status] ?? "border-[#8B98AC]/40 text-[#8B98AC]"
+      )}
+    >
+      {status}
+    </span>
   );
 }

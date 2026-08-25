@@ -69,3 +69,12 @@ class RepositoryStatsOut(BaseModel):
     modules: list[ModuleStatOut]
     completed_at: datetime | None
     duration_seconds: float | None
+
+class RepositoryListItemOut(BaseModel):
+    id: UUID
+    github_url: str
+    name: str
+    status: str
+    primary_language: str | None
+    imported_at: datetime
+    file_count: int
