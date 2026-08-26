@@ -81,14 +81,12 @@ async def delete_repository(repository_id: UUID, db: AsyncSession = Depends(get_
     if repository is None:
         raise HTTPException(status_code=404, detail="Repository not found")
 
-    # Postgres cascade only covers File/Job/Symbol/ImportEdge — Qdrant
-    # vectors and the on-disk clone live outside that, so clean them up
-    # explicitly (same gap noted in scripts/reset_repos.py).
-    await delete_repository_vectors(repository_id)
-    shutil.rmtree(Path(settings.repo_storage_dir) / str(repository_id), ignore_errors=True)
-
     await db.delete(repository)
     await db.commit()
+
+    # Postgres row is gone — now clean up what the DB cascade can't reach.
+    await delete_repository_vectors(repository_id)
+    shutil.rmtree(Path(settings.repo_storage_dir) / str(repository_id), ignore_errors=True)
 
 
 @router.get("/{repository_id}", response_model=RepositoryOut)
