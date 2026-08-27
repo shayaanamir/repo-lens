@@ -23,6 +23,7 @@ import {
     type JobStatus,
 } from "@/lib/api-client";
 import { useJobStatus } from "@/hooks/useJobStatus";
+import { MarkdownContent } from "@/components/markdown-content";
 
 const STAGE_LABELS: Record<JobStage, string> = {
     clone: "Clone",
@@ -277,7 +278,7 @@ function SummaryCard({ repo, stats }: { repo: Repository; stats: RepositoryStats
             </div>
 
             {repo.summary ? (
-                <p className="mt-4 text-[15px] leading-relaxed text-rl-text">{repo.summary}</p>
+                <MarkdownContent content={repo.summary} className="mt-4 text-[15px]" />
             ) : (
                 <p className="mt-4 text-sm italic text-rl-text-dim">
                     No AI summary available for this repository — everything else still works.
