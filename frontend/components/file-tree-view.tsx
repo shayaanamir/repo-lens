@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, File as FileIcon, Folder, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FileTreeNode } from "@/lib/file-tree";
@@ -23,6 +23,12 @@ export function FileTreeView({
     );
 }
 
+/** True if `dirPath` is an ancestor directory of `targetPath`
+ * (e.g. "src" and "src/lib" are ancestors of "src/lib/utils.ts"). */
+function isAncestorOf(dirPath: string, targetPath: string): boolean {
+    return targetPath === dirPath || targetPath.startsWith(`${dirPath}/`);
+}
+
 function TreeNode({
     node,
     depth,
@@ -36,6 +42,16 @@ function TreeNode({
 }) {
     const [expanded, setExpanded] = useState(depth === 0);
     const indent = { paddingLeft: `${depth * 14 + 10}px` };
+
+    // Auto-expand this directory whenever it sits on the path to the
+    // currently selected file — e.g. after following "Open in Explorer"
+    // from the graph/search page with a deeply nested file. Only ever
+    // forces *open*, never closes a folder the user expanded manually.
+    useEffect(() => {
+        if (node.type === "dir" && selectedPath && isAncestorOf(node.path, selectedPath)) {
+            setExpanded(true);
+        }
+    }, [selectedPath, node.type, node.path]);
 
     if (node.type === "file") {
         const isSelected = node.path === selectedPath;
