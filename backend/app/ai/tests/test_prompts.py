@@ -1,4 +1,5 @@
 from app.ai.prompts import ContextChunk, build_chat_prompt, build_explain_prompt, build_summary_prompt
+from app.ai.prompts import ModuleSummary, build_interview_prep_prompt
 
 
 # ---------------------------------------------------------------------
@@ -111,3 +112,83 @@ def test_summary_prompt_lists_sample_symbols():
     prompt = build_summary_prompt("Flask", None, "Python", symbols)
 
     assert "app/app.py: class App" in prompt
+
+
+
+# ---------------------------------------------------------------------
+# Interview prep prompt
+# ---------------------------------------------------------------------
+
+def test_interview_prep_includes_repo_name_and_language():
+    prompt = build_interview_prep_prompt("Flask", None, "Python", [])
+
+    assert "Flask" in prompt
+    assert "Python" in prompt
+
+
+def test_interview_prep_lists_modules_with_degree_info():
+    modules = [
+        ModuleSummary(path="app/routing.py", symbol_count=5, in_degree=3, out_degree=1),
+        ModuleSummary(path="app/app.py", symbol_count=2, in_degree=0, out_degree=4),
+    ]
+
+    prompt = build_interview_prep_prompt("Flask", None, "Python", modules)
+
+    assert "app/routing.py (symbols: 5, referenced by 3, imports 1)" in prompt
+    assert "app/app.py (symbols: 2, referenced by 0, imports 4)" in prompt
+
+
+def test_interview_prep_handles_no_modules():
+    prompt = build_interview_prep_prompt("Flask", None, "Python", [])
+
+    assert "no module reference data available" in prompt
+
+
+def test_interview_prep_includes_readme_excerpt():
+    prompt = build_interview_prep_prompt("Flask", "A lightweight WSGI framework.", "Python", [])
+
+    assert "A lightweight WSGI framework." in prompt
+
+
+def test_interview_prep_handles_missing_readme_and_language():
+    prompt = build_interview_prep_prompt("Flask", None, None, [])
+
+    assert "no README found" in prompt
+    assert "unknown" in prompt
+
+
+def test_interview_prep_truncates_long_readme():
+    long_readme = "R" * 10_000
+    prompt = build_interview_prep_prompt("Flask", long_readme, "Python", [])
+
+    excerpt_section = prompt.split("README excerpt:\n")[1].split("\n\nMost-referenced modules:")[0]
+    assert len(excerpt_section) == 3000
+
+
+def test_interview_prep_includes_user_context_when_provided():
+    prompt = build_interview_prep_prompt(
+        "Flask", None, "Python", [], user_context="I fought a nasty race condition in the pool."
+    )
+
+    assert "I fought a nasty race condition in the pool." in prompt
+
+
+def test_interview_prep_handles_missing_user_context():
+    prompt = build_interview_prep_prompt("Flask", None, "Python", [], user_context=None)
+
+    assert "no additional context provided by the candidate" in prompt
+
+
+def test_interview_prep_handles_whitespace_only_user_context():
+    prompt = build_interview_prep_prompt("Flask", None, "Python", [], user_context="   ")
+
+    assert "no additional context provided by the candidate" in prompt
+
+
+def test_interview_prep_instructs_json_only_output():
+    prompt = build_interview_prep_prompt("Flask", None, "Python", [])
+
+    assert "ONLY a single valid JSON object" in prompt
+    assert '"pitch"' in prompt
+    assert '"talking_points"' in prompt
+    assert '"questions"' in prompt

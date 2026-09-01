@@ -265,3 +265,22 @@ export function listRepositories(): Promise<RepositoryListItem[]> {
 export function deleteRepository(id: string): Promise<void> {
     return request<void>(`/repositories/${id}`, { method: "DELETE" });
 }
+
+export interface QAPair {
+    question: string;
+    answer: string;
+}
+
+export interface InterviewPrepResponse {
+    pitch: string;
+    talking_points: string[];
+    questions: QAPair[];
+    grounded_in: SourceRef[];
+}
+
+export function getInterviewPrep(id: string, context?: string): Promise<InterviewPrepResponse> {
+    return request<InterviewPrepResponse>(`/repositories/${id}/interview-prep`, {
+        method: "POST",
+        body: JSON.stringify({ context: context?.trim() || null }),
+    });
+}

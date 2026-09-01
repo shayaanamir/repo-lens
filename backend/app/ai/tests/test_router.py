@@ -12,7 +12,7 @@ from app.ai.prompts import SourceRef
 from app.core.db import get_db
 from app.main import app
 from app.repo.models import Repository
-
+from app.ai.interview_prep_service import InterviewPrepResult, QAPair
 
 @pytest.fixture
 def anyio_backend():
@@ -142,3 +142,104 @@ async def test_explain_ai_unavailable_returns_503(client, monkeypatch):
     response = await client.post(f"/repositories/{repo.id}/files/main.py/explain")
 
     assert response.status_code == 503
+
+
+# ---------------------------------------------------------------------
+# /interview-prep
+# ---------------------------------------------------------------------
+
+@pytest.mark.anyio
+async def test_interview_prep_repository_not_found_returns_404(client):
+    _override_db(None)
+
+    response = await client.post(f"/repositories/{uuid.uuid4()}/interview-prep", json={})
+
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_interview_prep_success_returns_structured_result(client, monkeypatch):
+    repo = _fake_repo()
+    _override_db(repo)
+
+    fake_result = InterviewPrepResult(
+        pitch="A demo project.",
+        talking_points=["Point one", "Point two"],
+        questions=[QAPair(question="Why X?", answer="Because Y.")],
+    )
+    monkeypatch.setattr(
+        router_module, "generate_interview_prep", AsyncMock(return_value=fake_result)
+    )
+
+    response = await client.post(f"/repositories/{repo.id}/interview-prep", json={})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pitch"] == "A demo project."
+    assert body["talking_points"] == ["Point one", "Point two"]
+    assert body["questions"] == [{"question": "Why X?", "answer": "Because Y."}]
+
+
+@pytest.mark.anyio
+async def test_interview_prep_passes_context_through(client, monkeypatch):
+    repo = _fake_repo()
+    _override_db(repo)
+
+    fake_result = InterviewPrepResult(pitch="p", talking_points=[], questions=[])
+    mock_generate = AsyncMock(return_value=fake_result)
+    monkeypatch.setattr(router_module, "generate_interview_prep", mock_generate)
+
+    await client.post(
+        f"/repositories/{repo.id}/interview-prep",
+        json={"context": "I debugged a nasty deadlock."},
+    )
+
+    _, call_args, _ = mock_generate.mock_calls[0]
+    assert call_args[2] == "I debugged a nasty deadlock."
+
+
+@pytest.mark.anyio
+async def test_interview_prep_omitted_context_defaults_to_none(client, monkeypatch):
+    repo = _fake_repo()
+    _override_db(repo)
+
+    fake_result = InterviewPrepResult(pitch="p", talking_points=[], questions=[])
+    mock_generate = AsyncMock(return_value=fake_result)
+    monkeypatch.setattr(router_module, "generate_interview_prep", mock_generate)
+
+    response = await client.post(f"/repositories/{repo.id}/interview-prep", json={})
+
+    assert response.status_code == 200
+    _, call_args, _ = mock_generate.mock_calls[0]
+    assert call_args[2] is None
+
+
+@pytest.mark.anyio
+async def test_interview_prep_ai_unavailable_returns_503(client, monkeypatch):
+    repo = _fake_repo()
+    _override_db(repo)
+
+    monkeypatch.setattr(
+        router_module,
+        "generate_interview_prep",
+        AsyncMock(side_effect=AIUnavailableError("rate limited")),
+    )
+
+    response = await client.post(f"/repositories/{repo.id}/interview-prep", json={})
+
+    assert response.status_code == 503
+
+@pytest.mark.anyio
+async def test_interview_prep_includes_grounded_in_sources(client, monkeypatch):
+    repo = _fake_repo()
+    _override_db(repo)
+
+    fake_result = InterviewPrepResult(
+        pitch="p", talking_points=[], questions=[],
+        grounded_in=[SourceRef(path="app/main.py", start_line=1, end_line=40)],
+    )
+    monkeypatch.setattr(router_module, "generate_interview_prep", AsyncMock(return_value=fake_result))
+
+    response = await client.post(f"/repositories/{repo.id}/interview-prep", json={})
+
+    assert response.json()["grounded_in"] == [{"path": "app/main.py", "start_line": 1, "end_line": 40}]

@@ -19,3 +19,19 @@ class ChatResponse(BaseModel):
 class ExplainResponse(BaseModel):
     explanation: str
     sources: list[SourceOut]
+
+
+class InterviewPrepRequest(BaseModel):
+    context: str | None = None
+
+
+class QAOut(BaseModel):
+    question: str
+    answer: str
+
+
+class InterviewPrepResponse(BaseModel):
+    pitch: str
+    talking_points: list[str]
+    questions: list[QAOut]
+    grounded_in: list[SourceOut]

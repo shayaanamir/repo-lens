@@ -148,6 +148,14 @@ async def get_repository_stats(db: AsyncSession, repository_id: uuid.UUID) -> Re
     )
 
 
+async def get_top_modules(db: AsyncSession, repository_id: uuid.UUID) -> list[ModuleStat]:
+    """Public entry point for callers outside this module (e.g. the AI
+    Module's interview-prep service) that want the same 'most referenced
+    modules' ranking the dashboard uses, without reaching into the
+    private helper below."""
+    return await _compute_top_modules(db, repository_id)
+
+
 async def _compute_top_modules(db: AsyncSession, repository_id: uuid.UUID) -> list[ModuleStat]:
     """Ranks files by total import-edge degree (in + out) — the same
     'most referenced' signal the frontend graph page already uses,

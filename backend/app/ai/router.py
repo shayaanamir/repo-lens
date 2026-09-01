@@ -7,7 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.chat_service import answer_chat_question
 from app.ai.errors import AIUnavailableError
 from app.ai.explain_service import FileNotFoundForExplainError, explain_file
-from app.ai.schemas import ChatRequest, ChatResponse, ExplainResponse, SourceOut
+from app.ai.interview_prep_service import generate_interview_prep
+from app.ai.schemas import (
+    ChatRequest,
+    ChatResponse,
+    ExplainResponse,
+    InterviewPrepRequest,
+    InterviewPrepResponse,
+    QAOut,
+    SourceOut,
+)
 from app.core.config import settings
 from app.core.db import get_db
 from app.repo.models import Repository
@@ -55,3 +64,28 @@ async def explain_repository_file(
         explanation=result.explanation,
         sources=[SourceOut(path=s.path, start_line=s.start_line, end_line=s.end_line) for s in result.sources],
     )
+
+
+@router.post("/{repository_id}/interview-prep", response_model=InterviewPrepResponse)
+async def get_interview_prep(
+    repository_id: uuid.UUID,
+    payload: InterviewPrepRequest,
+    db: AsyncSession = Depends(get_db),
+) -> InterviewPrepResponse:
+    repository = await db.get(Repository, repository_id)
+    if repository is None:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    try:
+        result = await generate_interview_prep(db, repository, payload.context)
+    except AIUnavailableError as e:
+        raise HTTPException(
+            status_code=503, detail=f"Interview prep is currently unavailable: {e}"
+        ) from e
+
+    return InterviewPrepResponse(
+    pitch=result.pitch,
+    talking_points=result.talking_points,
+    questions=[QAOut(question=q.question, answer=q.answer) for q in result.questions],
+    grounded_in=[SourceOut(path=s.path, start_line=s.start_line, end_line=s.end_line) for s in result.grounded_in],
+)

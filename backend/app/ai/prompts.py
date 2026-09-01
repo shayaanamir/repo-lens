@@ -17,6 +17,13 @@ class SourceRef:
     start_line: int
     end_line: int
 
+@dataclass
+class ModuleSummary:
+    path: str
+    symbol_count: int
+    in_degree: int
+    out_degree: int
+
 
 def _format_chunk(chunk: ContextChunk, index: int) -> str:
     label = f"{chunk.path}:{chunk.start_line}-{chunk.end_line}"
@@ -84,3 +91,56 @@ Sample of top-level symbols:
 {symbol_lines if symbol_lines else "(none extracted)"}
 
 Summary:"""
+
+
+def build_interview_prep_prompt(
+    repo_name: str,
+    readme_content: str | None,
+    primary_language: str | None,
+    modules: list[ModuleSummary],
+    user_context: str | None = None,
+) -> str:
+    readme_excerpt = (readme_content or "")[:3000]
+
+    module_lines = "\n".join(
+        f"- {m.path} (symbols: {m.symbol_count}, referenced by {m.in_degree}, imports {m.out_degree})"
+        for m in modules
+    )
+
+    context_section = (
+        user_context.strip()
+        if user_context and user_context.strip()
+        else "(no additional context provided by the candidate)"
+    )
+
+    return f"""You are helping a developer prepare to discuss the "{repo_name}" repository in a technical
+interview, as if they built or worked deeply on it. Ground everything in the facts given below —
+do not invent features, metrics, or design decisions that aren't supported by them.
+
+Respond with ONLY a single valid JSON object, no markdown code fences, no preamble, matching
+exactly this shape:
+{{
+  "pitch": "<2-4 sentence elevator pitch for the project>",
+  "talking_points": ["<ordered architecture walkthrough point>", ...],
+  "questions": [
+    {{"question": "<likely interview question>", "answer": "<concise model answer>"}}
+  ]
+}}
+
+Include 3-6 talking_points and 4-6 questions. Questions should cover a mix of design tradeoffs,
+failure handling, and "what would you change at scale" — the kind of thing an interviewer actually
+probes on, not generic trivia. If the candidate's own notes below describe a hard problem they
+solved, weave at least one question/answer around it using their own framing.
+
+Primary language: {primary_language or "unknown"}
+
+README excerpt:
+{readme_excerpt if readme_excerpt else "(no README found)"}
+
+Most-referenced modules:
+{module_lines if module_lines else "(no module reference data available)"}
+
+Candidate's own notes on challenges/decisions:
+{context_section}
+
+JSON response:"""
