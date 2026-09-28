@@ -23,6 +23,7 @@ import {
     type RepositoryStats,
 } from "@/lib/api-client";
 import { MarkdownContent } from "@/components/markdown-content";
+import { WalkthroughFlow } from "@/components/interview-prep/walkthrough-flow";
 import { cn } from "@/lib/utils";
 
 type SectionKey = "pitch" | "walkthrough" | "questions" | "tricky";
@@ -205,9 +206,9 @@ export default function InterviewPrepPage() {
                                 {SECTIONS.find((s) => s.key === selected)!.title}
                             </p>
 
-                            <div className="mt-4 max-w-3xl">
+                            <div className={cn("mt-4", selected === "walkthrough" ? "max-w-none" : "max-w-3xl")}>
                                 {selected === "pitch" && <PitchView result={result} repositoryId={repositoryId} />}
-                                {selected === "walkthrough" && <WalkthroughView points={result.talking_points} />}
+                                {selected === "walkthrough" && <WalkthroughView points={result.talking_points} repositoryId={repositoryId} />}
                                 {selected === "questions" && <QuestionsView questions={result.questions} />}
                                 {selected === "tricky" && <TrickyDecisionsView context={context} />}
                             </div>
@@ -278,20 +279,11 @@ function PitchView({ result, repositoryId }: { result: InterviewPrepResponse; re
     );
 }
 
-function WalkthroughView({ points }: { points: string[] }) {
+function WalkthroughView({ points, repositoryId }: { points: string[]; repositoryId: string }) {
     if (points.length === 0) {
         return <p className="font-mono text-xs text-rl-text-dim">No talking points were generated.</p>;
     }
-    return (
-        <ol className="space-y-4">
-            {points.map((point, i) => (
-                <li key={i} className="flex gap-3 rounded-lg border border-rl-border bg-rl-surface p-4">
-                    <span className="shrink-0 font-mono text-xs text-rl-signal">{String(i + 1).padStart(2, "0")}</span>
-                    <p className="text-sm leading-relaxed text-rl-text">{point}</p>
-                </li>
-            ))}
-        </ol>
-    );
+    return <WalkthroughFlow points={points} repositoryId={repositoryId} />;
 }
 
 function QuestionsView({ questions }: { questions: { question: string; answer: string }[] }) {

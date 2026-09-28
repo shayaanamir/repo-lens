@@ -100,7 +100,7 @@ def build_interview_prep_prompt(
     modules: list[ModuleSummary],
     user_context: str | None = None,
 ) -> str:
-    readme_excerpt = (readme_content or "")[:3000]
+    readme_excerpt = (readme_content or "")[:5000]
 
     module_lines = "\n".join(
         f"- {m.path} (symbols: {m.symbol_count}, referenced by {m.in_degree}, imports {m.out_degree})"
@@ -115,22 +115,39 @@ def build_interview_prep_prompt(
 
     return f"""You are helping a developer prepare to discuss the "{repo_name}" repository in a technical
 interview, as if they built or worked deeply on it. Ground everything in the facts given below —
-do not invent features, metrics, or design decisions that aren't supported by them.
+do not invent features, metrics, or design decisions that aren't supported by them. Where the
+facts don't cover something (e.g. exact algorithms, historical reasoning), say so honestly inside
+the relevant answer rather than fabricating specifics — but don't let that stop you from reasoning
+in depth about what IS knowable: architecture, data flow, tradeoffs implied by the structure itself,
+and how the pieces fit together.
+
+Depth matters more than polish here. A candidate who gives one-sentence answers fails technical
+interviews. Write like a senior engineer walking a peer through the codebase, not like a summary
+blurb — explain mechanisms, not just labels.
 
 Respond with ONLY a single valid JSON object, no markdown code fences, no preamble, matching
 exactly this shape:
 {{
-  "pitch": "<2-4 sentence elevator pitch for the project>",
-  "talking_points": ["<ordered architecture walkthrough point>", ...],
+  "pitch": "<elevator pitch, 6-10 sentences>",
+  "talking_points": ["<detailed architecture walkthrough point>", ...],
   "questions": [
-    {{"question": "<likely interview question>", "answer": "<concise model answer>"}}
+    {{"question": "<likely interview question>", "answer": "<thorough model answer>"}}
   ]
 }}
 
-Include 3-6 talking_points and 4-6 questions. Questions should cover a mix of design tradeoffs,
-failure handling, and "what would you change at scale" — the kind of thing an interviewer actually
-probes on, not generic trivia. If the candidate's own notes below describe a hard problem they
-solved, weave at least one question/answer around it using their own framing.
+Requirements for depth:
+- "pitch": 6-10 sentences. Cover what the project does, WHY it's built the way it is (the core
+  design tension it resolves), and what would break or degrade if a key piece were removed.
+- "talking_points": 5-8 points, each 3-5 sentences. For each module/mechanism, explain not just
+  what it does but HOW — the actual flow of data or control through it, what problem it solves,
+  and what would happen without it. Reference concrete file paths from the module list below where
+  relevant so the candidate can point at real code.
+- "questions": 5-7 questions covering a mix of: design tradeoffs ("why X over Y"), failure/edge-case
+  handling, scaling concerns, and "what would you change." Each answer should be 4-8 sentences —
+  give real engineering reasoning (tradeoffs considered, what breaks at scale, alternative
+  approaches and why they weren't chosen), not a one-line dictionary definition. If the candidate's
+  own notes below describe a hard problem they solved, include at least one question built directly
+  around it, using their own framing and going deep on the mechanism they describe.
 
 Primary language: {primary_language or "unknown"}
 

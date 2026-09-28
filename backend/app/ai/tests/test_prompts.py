@@ -162,7 +162,7 @@ def test_interview_prep_truncates_long_readme():
     prompt = build_interview_prep_prompt("Flask", long_readme, "Python", [])
 
     excerpt_section = prompt.split("README excerpt:\n")[1].split("\n\nMost-referenced modules:")[0]
-    assert len(excerpt_section) == 3000
+    assert len(excerpt_section) == 5000
 
 
 def test_interview_prep_includes_user_context_when_provided():
