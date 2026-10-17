@@ -21,15 +21,29 @@ from app.repo.schemas import (
     RepositoryStatsOut,
     StageStatOut,
 )
-from app.repo.service import RepositoryAlreadyExistsError, import_repository
 from app.repo.stats_service import get_repository_stats
 from app.repo.validators import InvalidRepoUrlError
 from app.search.qdrant_client import delete_repository_vectors
+from app.core.rate_limit import rate_limit
+from app.core.security import require_admin
+from app.repo.service import (
+    RepositoryAlreadyExistsError,
+    RepositoryLimitReachedError,
+    import_repository,
+)
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
 
-@router.post("", response_model=RepositoryOut, status_code=201)
+@router.post(
+    "",
+    response_model=RepositoryOut,
+    status_code=201,
+    dependencies=[
+        Depends(rate_limit(5, 3600)),
+        Depends(rate_limit(20, 3600, scope="global")),
+    ],
+)
 async def create_repository(
     payload: RepositoryCreate, db: AsyncSession = Depends(get_db)
 ):
@@ -39,6 +53,8 @@ async def create_repository(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RepositoryAlreadyExistsError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
+    except RepositoryLimitReachedError as e:
+        raise HTTPException(status_code=429, detail=str(e)) from e
     except CloneError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
@@ -75,7 +91,9 @@ async def list_repositories(db: AsyncSession = Depends(get_db)):
     ]
 
 
-@router.delete("/{repository_id}", status_code=204)
+@router.delete(
+    "/{repository_id}", status_code=204, dependencies=[Depends(require_admin)]
+)
 async def delete_repository(repository_id: UUID, db: AsyncSession = Depends(get_db)):
     repository = await db.get(Repository, repository_id)
     if repository is None:

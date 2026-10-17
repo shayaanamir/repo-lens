@@ -1,13 +1,16 @@
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.jobs.queue import enqueue_indexing_pipeline
 from app.repo.models import Repository
 from app.repo.validators import validate_github_url
+from app.core.config import settings
 
+class RepositoryLimitReachedError(Exception):
+    pass
 
 class RepositoryAlreadyExistsError(Exception):
     pass
@@ -35,6 +38,14 @@ async def import_repository(db: AsyncSession, github_url: str) -> Repository:
         raise RepositoryAlreadyExistsError(
             f"Repository already imported: {normalized_url}"
         )
+
+    if settings.max_repositories:
+        current = await db.scalar(select(func.count(Repository.id)))
+        if (current or 0) >= settings.max_repositories:
+            raise RepositoryLimitReachedError(
+                f"This demo is limited to {settings.max_repositories} repositories. "
+                "Please try again later."
+            )
 
     repo_id = uuid4()
     name = normalized_url.rstrip("/").split("/")[-1]

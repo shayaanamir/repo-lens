@@ -12,7 +12,7 @@ from app.main import app
 from app.repo import router as router_module
 from app.repo.git_service import CloneError
 from app.repo.models import File, Repository
-from app.repo.service import RepositoryAlreadyExistsError
+from app.repo.service import RepositoryAlreadyExistsError, RepositoryLimitReachedError
 from app.repo.validators import InvalidRepoUrlError
 
 
@@ -275,3 +275,40 @@ async def test_get_file_content_known_file_without_content_gives_clear_404(clien
 
     assert response.status_code == 404
     assert "isn't available" in response.json()["detail"]
+
+@pytest.mark.anyio
+async def test_create_repository_limit_reached_returns_429(client, monkeypatch):
+    monkeypatch.setattr(
+        router_module,
+        "import_repository",
+        AsyncMock(side_effect=RepositoryLimitReachedError("full")),
+    )
+
+    response = await client.post(
+        "/repositories", json={"github_url": "https://github.com/octocat/Hello-World"}
+    )
+
+    assert response.status_code == 429
+
+
+@pytest.mark.anyio
+async def test_delete_requires_admin_token_when_configured(client, monkeypatch):
+    monkeypatch.setattr(settings, "admin_token", "s3cret")
+
+    response = await client.delete(f"/repositories/{uuid.uuid4()}")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_delete_with_valid_admin_token_gets_past_auth(client, monkeypatch):
+    monkeypatch.setattr(settings, "admin_token", "s3cret")
+    mock_session = MagicMock()
+    mock_session.get = AsyncMock(return_value=None)
+    _override_db(mock_session)
+
+    response = await client.delete(
+        f"/repositories/{uuid.uuid4()}", headers={"Authorization": "Bearer s3cret"}
+    )
+
+    assert response.status_code == 404  # authorized; the repository just doesn't exist

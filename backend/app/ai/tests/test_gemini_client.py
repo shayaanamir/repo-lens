@@ -121,3 +121,21 @@ async def test_timeout_raises_gemini_error(monkeypatch):
 
     with pytest.raises(GeminiError, match="timed out"):
         await generate_content("hi")
+
+@pytest.mark.anyio
+async def test_global_ai_budget_blocks_calls_over_the_limit(monkeypatch):
+    from app.ai import gemini_client as gemini_client_module
+
+    monkeypatch.setattr(settings, "ai_global_hourly_limit", 1)
+    monkeypatch.setattr(gemini_client_module, "_ai_budget", None)
+
+    def handler(request):
+        return httpx.Response(200, json={
+            "candidates": [{"content": {"parts": [{"text": "ok"}]}}]
+        })
+
+    _patch_client_with_handler(monkeypatch, handler)
+
+    assert await generate_content("one") == "ok"
+    with pytest.raises(GeminiRateLimitError):
+        await generate_content("two")

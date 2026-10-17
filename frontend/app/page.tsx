@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const EXAMPLE_REPOS = ["pallets/flask", "octocat/Hello-World", "tiangolo/fastapi"];
+const DELETE_DISABLED = process.env.NEXT_PUBLIC_DISABLE_DELETE === "true";
 
 /** Accepts "owner/repo" shorthand and expands it to a full GitHub URL,
  * so people can paste either form — the backend still validates the
@@ -349,19 +350,21 @@ function RepositoryList() {
 
             <div className="flex shrink-0 items-center gap-1">
               <ExternalLink className="h-3.5 w-3.5 text-[#8B98AC] opacity-0 transition-opacity group-hover:opacity-100" />
-              <button
-                type="button"
-                onClick={(e) => handleDelete(e, repo.id, repo.name)}
-                disabled={deletingId === repo.id}
-                aria-label={`Delete ${repo.name}`}
-                className="rounded p-1.5 text-[#8B98AC] transition-colors hover:bg-[#F2555C]/10 hover:text-[#F2555C] disabled:opacity-50"
-              >
-                {deletingId === repo.id ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3.5 w-3.5" />
-                )}
-              </button>
+              {!DELETE_DISABLED && (
+                <button
+                  type="button"
+                  onClick={(e) => handleDelete(e, repo.id, repo.name)}
+                  disabled={deletingId === repo.id}
+                  aria-label={`Delete ${repo.name}`}
+                  className="rounded p-1.5 text-[#8B98AC] transition-colors hover:bg-[#F2555C]/10 hover:text-[#F2555C] disabled:opacity-50"
+                >
+                  {deletingId === repo.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              )}
             </div>
           </div>
         ))}

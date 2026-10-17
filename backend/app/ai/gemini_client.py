@@ -2,7 +2,7 @@ import httpx
 import logging
 
 from app.core.config import settings
-
+from app.core.rate_limit import SlidingWindowLimiter
 logger = logging.getLogger(__name__)
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -22,6 +22,23 @@ class GeminiRateLimitError(GeminiError):
     pass
 
 
+_ai_budget: SlidingWindowLimiter | None = None
+
+
+def _check_ai_budget() -> None:
+    """Shared hourly cap across all visitors, protecting the free Gemini
+    quota. Surfaces as a clean 503 through the existing AIUnavailableError path."""
+    global _ai_budget
+    limit = settings.ai_global_hourly_limit
+    if not limit:
+        return
+    if _ai_budget is None or _ai_budget.max_calls != limit:
+        _ai_budget = SlidingWindowLimiter(limit, 3600)
+    if _ai_budget.check("global") is not None:
+        raise GeminiRateLimitError(
+            "The shared AI budget for this demo is used up. Please try again later."
+        )
+
 async def generate_content(
     prompt: str,
     model: str | None = None,
@@ -34,6 +51,8 @@ async def generate_content(
     """
     if not settings.gemini_api_key:
         raise GeminiError("GEMINI_API_KEY is not configured")
+
+    _check_ai_budget()
 
     resolved_model = model or settings.gemini_model
     url = f"{GEMINI_API_BASE}/{resolved_model}:generateContent"

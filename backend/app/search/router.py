@@ -8,11 +8,12 @@ from app.repo.models import Repository
 from app.search.embeddings import EmbeddingTaskType, embed_texts
 from app.search.qdrant_client import search_chunks
 from app.search.schemas import SearchResponseOut, SearchResultOut
+from app.core.rate_limit import rate_limit
 
 router = APIRouter(prefix="/repositories", tags=["search"])
 
 
-@router.get("/{repository_id}/search", response_model=SearchResponseOut)
+@router.get("/{repository_id}/search", response_model=SearchResponseOut, dependencies=[Depends(rate_limit(60, 60))])
 async def search_repository(
     repository_id: uuid.UUID,
     q: str = Query(..., min_length=1, description="Natural-language search query"),

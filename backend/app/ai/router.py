@@ -20,11 +20,13 @@ from app.ai.schemas import (
 from app.core.config import settings
 from app.core.db import get_db
 from app.repo.models import Repository
+from app.core.rate_limit import rate_limit
 
 router = APIRouter(prefix="/repositories", tags=["ai"])
 
 
-@router.post("/{repository_id}/chat", response_model=ChatResponse)
+@router.post("/{repository_id}/chat", response_model=ChatResponse,
+             dependencies=[Depends(rate_limit(20, 3600))])
 async def chat_with_repository(
     repository_id: uuid.UUID, payload: ChatRequest, db: AsyncSession = Depends(get_db)
 ) -> ChatResponse:
@@ -43,7 +45,8 @@ async def chat_with_repository(
     )
 
 
-@router.post("/{repository_id}/files/{file_path:path}/explain", response_model=ExplainResponse)
+@router.post("/{repository_id}/files/{file_path:path}/explain", response_model=ExplainResponse,
+             dependencies=[Depends(rate_limit(20, 3600))])
 async def explain_repository_file(
     repository_id: uuid.UUID, file_path: str, db: AsyncSession = Depends(get_db)
 ) -> ExplainResponse:
@@ -66,7 +69,8 @@ async def explain_repository_file(
     )
 
 
-@router.post("/{repository_id}/interview-prep", response_model=InterviewPrepResponse)
+@router.post("/{repository_id}/interview-prep", response_model=InterviewPrepResponse,
+             dependencies=[Depends(rate_limit(5, 3600))])
 async def get_interview_prep(
     repository_id: uuid.UUID,
     payload: InterviewPrepRequest,
