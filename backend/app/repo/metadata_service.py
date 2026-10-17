@@ -42,7 +42,8 @@ EXTENSION_LANGUAGE_MAP = {
 }
 
 README_CANDIDATES = ("README.md", "README", "README.rst", "README.txt")
-
+MAX_STORED_FILE_BYTES = 300 * 1024
+MAX_STORED_TOTAL_BYTES = 20 * 1024 * 1024  # per repository
 
 @dataclass
 class RepoMetadata:
@@ -122,12 +123,22 @@ def _is_in_ignored_dir(path: Path, repo_root: Path) -> bool:
     relative = path.relative_to(repo_root)
     return any(part in IGNORED_DIRS for part in relative.parts[:-1])
 
+
+def _text_for_storage(content_bytes: bytes, stored_so_far: int) -> str | None:
+    """Returns decoded text, or None for files that shouldn't be stored:
+    too large, over the per-repo budget, or binary. Postgres text columns
+    reject NUL bytes, so anything containing one counts as binary."""
+    if len(content_bytes) > MAX_STORED_FILE_BYTES:
+        return None
+    if stored_so_far + len(content_bytes) > MAX_STORED_TOTAL_BYTES:
+        return None
+    if b"\x00" in content_bytes:
+        return None
+    return content_bytes.decode("utf-8", errors="replace")
+
 def scan_files(repo_path: Path) -> list[dict]:
-    """Walks a cloned repo and builds one record per file for the
-    `file` table: relative path, detected language, size, content hash.
-    Shared by both the synchronous import path (repo/service.py) and
-    the background analysis job stage (analysis/service.py)."""
     records = []
+    stored_total = 0
     for path in repo_path.rglob("*"):
         if not path.is_file():
             continue
@@ -141,12 +152,17 @@ def scan_files(repo_path: Path) -> list[dict]:
         except OSError:
             continue  # skip unreadable files rather than failing the whole scan
 
+        content = _text_for_storage(content_bytes, stored_total)
+        if content is not None:
+            stored_total += len(content_bytes)
+
         records.append(
             {
-                "path": relative.as_posix(),  # forward slashes even on Windows
+                "path": relative.as_posix(),
                 "language": EXTENSION_LANGUAGE_MAP.get(path.suffix.lower()),
                 "size": len(content_bytes),
                 "content_hash": hashlib.sha256(content_bytes).hexdigest(),
+                "content": content,
             }
         )
     return records

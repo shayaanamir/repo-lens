@@ -7,7 +7,7 @@ from app.ai import explain_service as explain_service_module
 from app.ai.errors import AIUnavailableError
 from app.ai.explain_service import FileNotFoundForExplainError
 from app.ai.gemini_client import GeminiError
-from app.repo.models import Repository
+from app.repo.models import File, Repository
 
 
 @pytest.fixture
@@ -88,3 +88,25 @@ async def test_explain_gemini_failure_raises_ai_unavailable(tmp_path, monkeypatc
         await explain_service_module.explain_file(
             db=_mock_db_no_symbols(), repository=_fake_repo(), repo_dir=tmp_path, file_path="main.py"
         )
+
+
+@pytest.mark.anyio
+async def test_explain_uses_database_content_when_disk_is_empty(tmp_path, monkeypatch):
+    stored = File(
+        id=uuid.uuid4(), repository_id=uuid.uuid4(), path="main.py",
+        language="Python", size=24, content="def foo():\n    return 1\n",
+    )
+    db = MagicMock()
+    db.scalar = AsyncMock(return_value=stored)
+    symbols_result = MagicMock()
+    symbols_result.all.return_value = []
+    db.execute = AsyncMock(return_value=symbols_result)
+
+    monkeypatch.setattr(explain_service_module, "generate_content", AsyncMock(return_value="ok"))
+
+    result = await explain_service_module.explain_file(
+        db=db, repository=_fake_repo(), repo_dir=tmp_path, file_path="main.py"
+    )
+
+    assert result.explanation == "ok"
+    assert result.sources[0].end_line == 2

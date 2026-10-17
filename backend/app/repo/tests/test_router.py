@@ -194,6 +194,7 @@ async def test_get_file_content_success(client, monkeypatch, tmp_path):
 
     mock_session = MagicMock()
     mock_session.get = AsyncMock(return_value=fake_repo)
+    mock_session.scalar = AsyncMock(return_value=None)  # no stored content -> disk fallback
     _override_db(mock_session)
 
     response = await client.get(f"/repositories/{fake_repo.id}/files/README")
@@ -210,6 +211,7 @@ async def test_get_file_content_path_traversal_blocked(client, monkeypatch, tmp_
 
     mock_session = MagicMock()
     mock_session.get = AsyncMock(return_value=fake_repo)
+    mock_session.scalar = AsyncMock(return_value=None)  # no stored content -> disk fallback
     _override_db(mock_session)
 
     response = await client.get(
@@ -227,8 +229,49 @@ async def test_get_file_content_missing_file_returns_404(client, monkeypatch, tm
 
     mock_session = MagicMock()
     mock_session.get = AsyncMock(return_value=fake_repo)
+    mock_session.scalar = AsyncMock(return_value=None)  # no stored content -> disk fallback
     _override_db(mock_session)
 
     response = await client.get(f"/repositories/{fake_repo.id}/files/nonexistent.txt")
 
     assert response.status_code == 404
+
+@pytest.mark.anyio
+async def test_get_file_content_prefers_database_content(client, monkeypatch, tmp_path):
+    fake_repo = _sample_repository()
+    monkeypatch.setattr(settings, "repo_storage_dir", str(tmp_path))  # nothing on disk
+
+    stored = File(
+        id=uuid.uuid4(), repository_id=fake_repo.id, path="README",
+        language=None, size=18, content="from the database\n",
+    )
+    mock_session = MagicMock()
+    mock_session.get = AsyncMock(return_value=fake_repo)
+    mock_session.scalar = AsyncMock(return_value=stored)
+    _override_db(mock_session)
+
+    response = await client.get(f"/repositories/{fake_repo.id}/files/README")
+
+    assert response.status_code == 200
+    assert response.json()["content"] == "from the database\n"
+
+
+@pytest.mark.anyio
+async def test_get_file_content_known_file_without_content_gives_clear_404(client, monkeypatch, tmp_path):
+    fake_repo = _sample_repository()
+    monkeypatch.setattr(settings, "repo_storage_dir", str(tmp_path))
+    (Path(tmp_path) / str(fake_repo.id)).mkdir(parents=True)
+
+    binary_record = File(
+        id=uuid.uuid4(), repository_id=fake_repo.id, path="logo.png",
+        language=None, size=100, content=None,
+    )
+    mock_session = MagicMock()
+    mock_session.get = AsyncMock(return_value=fake_repo)
+    mock_session.scalar = AsyncMock(return_value=binary_record)
+    _override_db(mock_session)
+
+    response = await client.get(f"/repositories/{fake_repo.id}/files/logo.png")
+
+    assert response.status_code == 404
+    assert "isn't available" in response.json()["detail"]

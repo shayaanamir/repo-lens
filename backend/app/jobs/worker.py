@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import shutil
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -30,6 +31,64 @@ POLL_INTERVAL_SECONDS = 5
 MAX_RETRIES = 3
 RETRYABLE_EXCEPTIONS = (CloneTimeoutError,)
 
+async def recover_interrupted_jobs(db: AsyncSession, storage_dir: Path) -> int:
+    """
+    Repairs pipelines left half-finished by a restart (free hosting sleeps
+    and wipes the disk). Returns how many repositories were recovered.
+
+    - Jobs stuck in RUNNING (the process died mid-stage) go back to PENDING.
+      A stuck clone also loses its partial directory, since git won't clone
+      into a non-empty one.
+    - If the clone stage finished but the clone directory is gone, later
+      stages can't read the source files, so the whole pipeline restarts
+      from clone.
+    - Pipelines containing a FAILED job are left alone: that failure is
+      real and is retried deliberately via scripts/retry_job.
+    """
+    incomplete_repo_ids = select(Job.repository_id).where(
+        Job.status != JobStatus.COMPLETED
+    )
+    result = await db.execute(
+        select(Job).where(Job.repository_id.in_(incomplete_repo_ids))
+    )
+
+    jobs_by_repo: dict = {}
+    for job in result.scalars().all():
+        jobs_by_repo.setdefault(job.repository_id, {})[JobStage(job.stage)] = job
+
+    recovered = 0
+    for repository_id, jobs in jobs_by_repo.items():
+        statuses = {stage: JobStatus(job.status) for stage, job in jobs.items()}
+        if JobStatus.FAILED in statuses.values():
+            continue
+
+        repo_dir = storage_dir / str(repository_id)
+        clone_done = statuses.get(JobStage.CLONE) == JobStatus.COMPLETED
+
+        if clone_done and not repo_dir.is_dir():
+            to_reset = list(jobs.values())  # full restart from clone
+        else:
+            to_reset = [
+                job for stage, job in jobs.items()
+                if statuses[stage] == JobStatus.RUNNING
+            ]
+        if not to_reset:
+            continue
+
+        if any(JobStage(job.stage) == JobStage.CLONE for job in to_reset):
+            shutil.rmtree(repo_dir, ignore_errors=True)
+
+        for job in to_reset:
+            job.status = JobStatus.PENDING
+            job.error = None
+            job.retry_count = 0
+            job.started_at = None
+            job.completed_at = None
+        recovered += 1
+
+    if recovered:
+        await db.commit()
+    return recovered
 
 async def run_worker_loop() -> None:
     """
@@ -38,6 +97,18 @@ async def run_worker_loop() -> None:
     started on FastAPI startup, stopped on shutdown.
     """
     logger.info("Job worker loop starting")
+    try:
+        async with async_session_factory() as db:
+            recovered = await recover_interrupted_jobs(
+                db, Path(settings.repo_storage_dir)
+            )
+        if recovered:
+            logger.warning(
+                "Recovered %d interrupted repository pipeline(s) on startup", recovered
+            )
+    except Exception:
+        logger.exception("Job recovery failed, continuing without it")
+
     while True:
         try:
             processed = await _process_next_job()
@@ -172,6 +243,7 @@ async def _run_clone_stage(job: Job) -> None:
             raise RuntimeError(f"Repository {job.repository_id} not found")
         github_url = repo.github_url
 
+    await asyncio.to_thread(shutil.rmtree, dest_dir, ignore_errors=True)
     cloned = await asyncio.to_thread(clone_repository, github_url, dest_dir)
 
     metadata = await asyncio.to_thread(extract_metadata, cloned.path)

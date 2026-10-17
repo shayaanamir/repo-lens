@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy.orm import undefer
 from app.core.config import settings
 from app.core.db import get_db
 from app.repo.git_service import CloneError
@@ -117,16 +117,30 @@ async def get_file_content(
     if repository is None:
         raise HTTPException(status_code=404, detail="Repository not found")
 
-    disk_path = Path(settings.repo_storage_dir) / str(repository_id) / file_path
+    # Prefer content stored in Postgres: the on-disk clone doesn't survive
+    # restarts on free hosting.
+    file_record = await db.scalar(
+        select(File)
+        .options(undefer(File.content))
+        .where(File.repository_id == repository_id, File.path == file_path)
+    )
+    if file_record is not None and file_record.content is not None:
+        return FileContentOut(path=file_path, content=file_record.content)
 
-    # Prevent path traversal (e.g. "../../etc/passwd") from escaping
-    # the repo's own clone directory.
+    # Fallback to the clone on disk (repos indexed before content was stored).
     repo_root = (Path(settings.repo_storage_dir) / str(repository_id)).resolve()
-    resolved = disk_path.resolve()
+    resolved = (repo_root / file_path).resolve()
+
+    # Prevent path traversal (e.g. "../../etc/passwd").
     if not resolved.is_relative_to(repo_root):
         raise HTTPException(status_code=400, detail="Invalid file path")
 
     if not resolved.is_file():
+        if file_record is not None:
+            raise HTTPException(
+                status_code=404,
+                detail="File content isn't available (binary or too large to display)",
+            )
         raise HTTPException(status_code=404, detail="File not found")
 
     try:

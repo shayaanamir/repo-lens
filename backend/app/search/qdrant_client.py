@@ -13,12 +13,13 @@ _client: AsyncQdrantClient | None = None
 
 
 def get_qdrant_client() -> AsyncQdrantClient:
-    """Returns a shared AsyncQdrantClient instance. Created lazily on
-    first call, then reused — mirrors app/core/db.py's single `engine`
-    pattern rather than opening a new connection per call."""
     global _client
     if _client is None:
-        _client = AsyncQdrantClient(url=settings.qdrant_url)
+        _client = AsyncQdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key or None,
+            cloud_inference=settings.embedding_provider == "qdrant_cloud",
+        )
     return _client
 
 
@@ -60,29 +61,25 @@ async def ensure_collection() -> None:
     logger.info("Created Qdrant collection '%s' (size=%d, cosine)", collection_name, VECTOR_SIZE)
 
 
+UPSERT_BATCH_SIZE = 64
+
 async def upsert_chunk_vectors(
     repository_id: uuid.UUID,
-    points: list[tuple[uuid.UUID, list[float], dict]],
+    points: list[tuple[uuid.UUID, object, dict]],
 ) -> None:
-    """
-    Writes a batch of (point_id, vector, payload) tuples to Qdrant.
-    Caller is responsible for building `payload` — expected shape:
-    {file_id, path, start_line, end_line, symbol_name, repository_id}.
-
-    Upsert (not insert) so re-running the embed stage on retry is safe:
-    same point_id overwrites the prior vector rather than duplicating it.
-    """
     if not points:
         return
 
     client = get_qdrant_client()
-    await client.upsert(
-        collection_name=settings.qdrant_collection_name,
-        points=[
-            models.PointStruct(id=str(point_id), vector=vector, payload=payload)
-            for point_id, vector, payload in points
-        ],
-    )
+    for start in range(0, len(points), UPSERT_BATCH_SIZE):
+        batch = points[start : start + UPSERT_BATCH_SIZE]
+        await client.upsert(
+            collection_name=settings.qdrant_collection_name,
+            points=[
+                models.PointStruct(id=str(point_id), vector=vector, payload=payload)
+                for point_id, vector, payload in batch
+            ],
+        )
 
 
 async def delete_repository_vectors(repository_id: uuid.UUID) -> None:

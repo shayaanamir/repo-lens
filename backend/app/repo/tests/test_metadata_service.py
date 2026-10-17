@@ -1,8 +1,7 @@
 import pytest
 
 from app.repo.git_service import clone_repository, cleanup_clone
-from app.repo.metadata_service import extract_metadata
-
+from app.repo.metadata_service import MAX_STORED_FILE_BYTES, extract_metadata, scan_files
 
 @pytest.mark.integration
 def test_extract_metadata_from_real_repo():
@@ -46,3 +45,16 @@ def test_extract_metadata_handles_missing_readme(tmp_path):
     assert metadata.readme_content is None
     assert metadata.file_count == 1
     assert metadata.primary_language == "Python"
+
+
+def test_scan_files_stores_text_but_not_binary_or_oversized(tmp_path):
+    (tmp_path / "main.py").write_text("print('hi')")
+    (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00binary")
+    (tmp_path / "huge.txt").write_text("x" * (MAX_STORED_FILE_BYTES + 1))
+
+    records = {r["path"]: r for r in scan_files(tmp_path)}
+
+    assert records["main.py"]["content"] == "print('hi')"
+    assert records["logo.png"]["content"] is None
+    assert records["huge.txt"]["content"] is None
+    assert records["huge.txt"]["size"] == MAX_STORED_FILE_BYTES + 1

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy.orm import undefer
 from app.ai.errors import AIUnavailableError
 from app.ai.gemini_client import GeminiError, generate_content
 from app.ai.prompts import ContextChunk, SourceRef, build_explain_prompt
@@ -31,16 +31,23 @@ class ExplainResult:
 async def explain_file(
     db: AsyncSession, repository: Repository, repo_dir: Path, file_path: str
 ) -> ExplainResult:
-    disk_path = _resolve_safe_path(repo_dir, file_path)
-    if not disk_path.is_file():
+    disk_path = _resolve_safe_path(repo_dir, file_path)  # raises on traversal
+
+    file_record = await db.scalar(
+        select(File)
+        .options(undefer(File.content))
+        .where(File.repository_id == repository.id, File.path == file_path)
+    )
+
+    if file_record is not None and file_record.content is not None:
+        content = file_record.content
+    elif disk_path.is_file():
+        content = disk_path.read_text(encoding="utf-8", errors="replace")
+    else:
         raise FileNotFoundForExplainError(file_path)
 
-    content = disk_path.read_text(encoding="utf-8", errors="replace")
     truncated = content[:MAX_EXPLAIN_FILE_CHARS]
-
-    file_id = await db.scalar(
-        select(File.id).where(File.repository_id == repository.id, File.path == file_path)
-    )
+    file_id = file_record.id if file_record is not None else None
 
     symbols: list[ContextChunk] = []
     if file_id is not None:

@@ -19,11 +19,17 @@ from app.core.db import Base
 from app.repo.models import Repository, File  # noqa: F401
 from app.jobs.models import Job
 from app.analysis.models import Symbol, ImportEdge  # noqa: F401
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-config.set_main_option("sqlalchemy.url", settings.database_url)
+def _to_sync_url(async_url: str) -> str:
+    """asyncpg takes `ssl=require`; psycopg2/libpq takes `sslmode=require`."""
+    sync_url = async_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
+    parts = urlsplit(sync_url)
+    query = [("sslmode" if k == "ssl" else k, v) for k, v in parse_qsl(parts.query)]
+    return urlunsplit(parts._replace(query=urlencode(query)))
 
-sync_url = settings.database_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
-config.set_main_option("sqlalchemy.url", sync_url)
+
+config.set_main_option("sqlalchemy.url", _to_sync_url(settings.database_url))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

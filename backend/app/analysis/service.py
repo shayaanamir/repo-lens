@@ -138,6 +138,7 @@ async def _scan_and_persist_files(db: AsyncSession, repository_id: uuid.UUID, re
                 language=rec["language"],
                 size=rec["size"],
                 content_hash=rec["content_hash"],
+                content=rec["content"],
             )
         )
     await db.commit()

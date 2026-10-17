@@ -45,3 +45,4 @@ class File(Base):
 
     repository: Mapped["Repository"] = relationship(back_populates="files")
     symbols: Mapped[list["Symbol"]] = relationship(back_populates="file", cascade="all, delete-orphan")
+    content: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
