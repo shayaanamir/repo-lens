@@ -264,7 +264,7 @@ Running on small free instances shaped several design choices (see below). To de
 ## Known limitations
 
 - Symbol extraction and the dependency graph cover **Python, JavaScript, TypeScript and TSX**. Other languages can still be browsed and searched, but have no symbols or graph edges.
-- Import resolution handles relative imports and Python package imports. Path aliases such as `@/components/...` in `tsconfig.json` are not resolved, so those edges are missing.
+- Import resolution covers relative imports, Python imports under nested source roots (such as backend/app/...), and TypeScript/JavaScript paths and baseUrl aliases from tsconfig.json/jsconfig.json, including relative extends. Aliases defined only in bundler configs (Vite, webpack) are not resolved.
 - The embedding model is general-purpose with a 256-token window, not code-specialised, so semantic search relevance is decent but not perfect.
 - Only public repositories are supported. There are no user accounts; a visitor's list lives in their browser, so clearing site data loses it.
 - On the free demo, the backend sleeps when idle, in-memory rate-limit counters reset on restart, and the number of repositories is capped.

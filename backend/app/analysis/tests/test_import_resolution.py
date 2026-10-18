@@ -1,5 +1,5 @@
 from app.analysis.import_extractor import extract_imports
-from app.analysis.import_resolver import resolve_import
+from app.analysis.import_resolver import resolve_import, resolve_imports
 
 
 # ---------------------------------------------------------------------
@@ -136,3 +136,57 @@ def test_js_bare_specifier_returns_none():
 def test_js_missing_relative_file_returns_none():
     imp = extract_imports(b"import x from './does-not-exist';\n", ".ts")[0]
     assert resolve_import("src/index.ts", imp, JS_KNOWN) is None
+
+# ---------------------------------------------------------------------
+# Python: nested source roots and "from pkg import submodule"
+# ---------------------------------------------------------------------
+
+MONOREPO_KNOWN = {
+    "backend/app/main.py",
+    "backend/app/core/__init__.py",
+    "backend/app/core/config.py",
+    "backend/app/core/db.py",
+}
+
+
+def test_python_absolute_from_import_records_imported_names():
+    imp = extract_imports(b"from app.core import config, db\n", ".py")[0]
+
+    assert imp.specifier == "app.core"
+    assert imp.imported_names == ("config", "db")
+
+
+def test_python_absolute_import_resolves_under_nested_source_root():
+    imp = extract_imports(b"from app.core.config import settings\n", ".py")[0]
+
+    assert resolve_import("backend/app/main.py", imp, MONOREPO_KNOWN) == "backend/app/core/config.py"
+
+
+def test_python_from_package_import_links_each_submodule():
+    imp = extract_imports(b"from app.core import config, db\n", ".py")[0]
+
+    assert resolve_imports("backend/app/main.py", imp, MONOREPO_KNOWN) == [
+        "backend/app/core/config.py",
+        "backend/app/core/db.py",
+    ]
+
+
+def test_python_from_package_import_attribute_falls_back_to_package_init():
+    imp = extract_imports(b"from app.core import something\n", ".py")[0]
+
+    assert resolve_imports("backend/app/main.py", imp, MONOREPO_KNOWN) == [
+        "backend/app/core/__init__.py"
+    ]
+
+
+def test_python_absolute_import_still_resolves_from_repo_root():
+    imp = extract_imports(b"from app.pkg import foo\n", ".py")[0]
+
+    assert resolve_import("app/main.py", imp, PY_KNOWN) == "app/pkg/foo.py"
+
+
+def test_python_relative_from_import_links_every_sibling_module():
+    known = {"app/main.py", "app/a.py", "app/b.py"}
+    imp = extract_imports(b"from . import a, b\n", ".py")[0]
+
+    assert resolve_imports("app/main.py", imp, known) == ["app/a.py", "app/b.py"]

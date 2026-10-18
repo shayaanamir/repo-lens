@@ -69,7 +69,7 @@ def _extract_python_imports(tree: Tree) -> list[ExtractedImport]:
             # otherwise be double-counted).
             names: list[str] = []
             for child in node.children:
-                if child is module_node:
+                if child == module_node:  # FIX 1: was `is`, see below
                     continue
                 if child.type == "dotted_name":
                     names.append(child.text.decode())
@@ -89,7 +89,11 @@ def _extract_python_imports(tree: Tree) -> list[ExtractedImport]:
                     )
                 else:
                     imports.append(
-                        ExtractedImport(specifier=module_node.text.decode(), is_relative=False)
+                        ExtractedImport(
+                            specifier=module_node.text.decode(),
+                            is_relative=False,
+                            imported_names=tuple(names),  # FIX 2: was missing
+                        )
                     )
 
         for child in node.children:

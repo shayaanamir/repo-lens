@@ -8,7 +8,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analysis.import_extractor import extract_imports
-from app.analysis.import_resolver import resolve_import
+from app.analysis.import_resolver import resolve_imports
+from app.analysis.path_aliases import load_path_mappings
 from app.analysis.models import ImportEdge, Symbol
 from app.analysis.symbol_extractor import extract_symbols
 from app.analysis.treesitter_parser import SUPPORTED_EXTENSIONS
@@ -151,8 +152,16 @@ async def _analyze_files_sync(repo_dir: Path, files: list) -> _AnalysisResult:
     return await asyncio.to_thread(_run_analysis, repo_dir, files)
 
 
+def _read_text(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
 def _run_analysis(repo_dir: Path, files: list) -> _AnalysisResult:
     known_paths = {path for _, path in files}
+    aliases = load_path_mappings(lambda rel: _read_text(repo_dir / rel), known_paths)
 
     symbols: list[_SymbolRecord] = []
     edges: list[_EdgeCandidate] = []
@@ -160,7 +169,7 @@ def _run_analysis(repo_dir: Path, files: list) -> _AnalysisResult:
     for file_id, rel_path in files:
         extension = Path(rel_path).suffix
         if extension.lower() not in SUPPORTED_EXTENSIONS:
-            continue  # unsupported file type — skip gracefully, don't fail the stage
+            continue  # unsupported file type: skip gracefully, don't fail the stage
 
         disk_path = repo_dir / rel_path
         try:
@@ -181,8 +190,7 @@ def _run_analysis(repo_dir: Path, files: list) -> _AnalysisResult:
             )
 
         for imp in extract_imports(source, extension):
-            resolved_path = resolve_import(rel_path, imp, known_paths)
-            if resolved_path is not None:
+            for resolved_path in resolve_imports(rel_path, imp, known_paths, aliases):
                 edges.append(_EdgeCandidate(source_file_id=file_id, target_path=resolved_path))
 
     return _AnalysisResult(symbols=symbols, edges=edges)
