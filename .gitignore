@@ -1,4 +1,6 @@
-docs/*
+docs/ARCHITECTURE.md
+docs/PROJECT.md
+docs/TASKS.md
 
 ### Environment / secrets ###
 .env
