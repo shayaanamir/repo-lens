@@ -1,8 +1,17 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, FolderTree, Network, Search, MessageSquare, Mic } from "lucide-react";
+import {
+    LayoutGrid,
+    FolderTree,
+    Network,
+    Search,
+    MessageSquare,
+    Mic,
+    Loader2,
+    type LucideIcon,
+} from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
@@ -16,21 +25,42 @@ const NAV_ITEMS = [
 
 const PREP_ITEM = { key: "prep", label: "Prep", icon: Mic, href: (id: string) => `/repo/${id}/interview` };
 
+/** Must render inside a <Link>: useLinkStatus reports whether *that*
+ * link's navigation is still in flight. */
+function NavItemContent({
+    icon: Icon,
+    label,
+    active,
+}: {
+    icon: LucideIcon;
+    label: string;
+    active: boolean;
+}) {
+    const { pending } = useLinkStatus();
+    const highlighted = active || pending;
+
+    return (
+        <span
+            className={cn(
+                "flex w-16 flex-col items-center gap-1 rounded-md border py-2.5 font-mono text-[9px] uppercase tracking-widest transition-colors",
+                highlighted
+                    ? "border-rl-signal/50 bg-rl-signal/10 text-rl-signal"
+                    : "border-transparent text-rl-text-dim hover:text-rl-text"
+            )}
+        >
+            {/* Same size either way, so nothing shifts when it swaps. */}
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+            {label}
+        </span>
+    );
+}
+
 export function AppSidebar({ repositoryId }: { repositoryId: string }) {
     const pathname = usePathname();
 
     function isActive(href: string) {
         if (href === `/repo/${repositoryId}`) return pathname === href;
-        return pathname?.startsWith(href);
-    }
-
-    function navClasses(active: boolean) {
-        return cn(
-            "flex w-16 flex-col items-center gap-1 rounded-md border py-2.5 font-mono text-[9px] uppercase tracking-widest transition-colors",
-            active
-                ? "border-rl-signal/50 bg-rl-signal/10 text-rl-signal"
-                : "border-transparent text-rl-text-dim hover:text-rl-text"
-        );
+        return pathname?.startsWith(href) ?? false;
     }
 
     return (
@@ -44,24 +74,30 @@ export function AppSidebar({ repositoryId }: { repositoryId: string }) {
                 </Link>
                 {NAV_ITEMS.map((item) => {
                     const href = item.href(repositoryId);
-                    const Icon = item.icon;
+                    const active = isActive(href);
                     return (
-                        <Link key={item.key} href={href} className={navClasses(isActive(href))}>
-                            <Icon className="h-4 w-4" />
-                            {item.label}
+                        <Link
+                            key={item.key}
+                            href={href}
+                            className="block"
+                            aria-current={active ? "page" : undefined}
+                        >
+                            <NavItemContent icon={item.icon} label={item.label} active={active} />
                         </Link>
                     );
                 })}
             </div>
 
             <div className="flex flex-col items-center gap-3">
-                <Link
-                    href={PREP_ITEM.href(repositoryId)}
-                    className={navClasses(isActive(PREP_ITEM.href(repositoryId)))}
-                >
-                    <PREP_ITEM.icon className="h-4 w-4" />
-                    {PREP_ITEM.label}
-                </Link>
+                {(() => {
+                    const href = PREP_ITEM.href(repositoryId);
+                    const active = isActive(href);
+                    return (
+                        <Link href={href} className="block" aria-current={active ? "page" : undefined}>
+                            <NavItemContent icon={PREP_ITEM.icon} label={PREP_ITEM.label} active={active} />
+                        </Link>
+                    );
+                })()}
                 <ThemeToggle />
             </div>
         </aside>
