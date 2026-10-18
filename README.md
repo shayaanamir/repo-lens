@@ -304,10 +304,7 @@ repo-lens/
 │   ├── components/
 │   ├── hooks/
 │   └── lib/             # API client, graph layout, file tree
-├── docker-compose.yml
-├── PROJECT.md           # vision, scope and requirements
-├── ARCHITECTURE.md      # detailed design
-└── TASKS.md             # phased build plan
+└── docker-compose.yml
 ```
 
 ---
