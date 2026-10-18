@@ -12,7 +12,7 @@ from app.main import app
 from app.repo import router as router_module
 from app.repo.git_service import CloneError
 from app.repo.models import File, Repository
-from app.repo.service import RepositoryAlreadyExistsError, RepositoryLimitReachedError
+from app.repo.service import RepositoryAlreadyExistsError, RepositoryLimitReachedError, VisitorLimitReachedError
 from app.repo.validators import InvalidRepoUrlError
 
 
@@ -20,6 +20,7 @@ from app.repo.validators import InvalidRepoUrlError
 def anyio_backend():
     return "asyncio"
 
+VISITOR_HEADERS = {"X-Visitor-Id": str(uuid.uuid4())}
 
 def _sample_repository(**overrides) -> Repository:
     """Builds an unsaved Repository object with sensible defaults, so
@@ -61,7 +62,7 @@ async def test_create_repository_success(client, monkeypatch):
     )
 
     response = await client.post(
-        "/repositories", json={"github_url": "https://github.com/octocat/Hello-World"}
+        "/repositories", json={"github_url": "https://github.com/octocat/Hello-World"}, headers=VISITOR_HEADERS
     )
 
     assert response.status_code == 201
@@ -78,7 +79,7 @@ async def test_create_repository_invalid_url_returns_400(client, monkeypatch):
         AsyncMock(side_effect=InvalidRepoUrlError("bad url")),
     )
 
-    response = await client.post("/repositories", json={"github_url": "not-a-url"})
+    response = await client.post("/repositories", json={"github_url": "not-a-url"}, headers=VISITOR_HEADERS)
 
     assert response.status_code == 400
 
@@ -92,7 +93,7 @@ async def test_create_repository_duplicate_returns_409(client, monkeypatch):
     )
 
     response = await client.post(
-        "/repositories", json={"github_url": "https://github.com/octocat/Hello-World"}
+        "/repositories", json={"github_url": "https://github.com/octocat/Hello-World"}, headers=VISITOR_HEADERS
     )
 
     assert response.status_code == 409
@@ -107,10 +108,74 @@ async def test_create_repository_clone_failure_returns_422(client, monkeypatch):
     )
 
     response = await client.post(
-        "/repositories", json={"github_url": "https://github.com/octocat/nonexistent"}
+        "/repositories", json={"github_url": "https://github.com/octocat/nonexistent"}, headers=VISITOR_HEADERS
     )
 
     assert response.status_code == 422
+
+@pytest.mark.anyio
+async def test_create_repository_requires_visitor_header(client):
+    response = await client.post(
+        "/repositories", json={"github_url": "https://github.com/octocat/Hello-World"}
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_create_repository_rejects_malformed_visitor_header(client):
+    response = await client.post(
+        "/repositories",
+        json={"github_url": "https://github.com/octocat/Hello-World"},
+        headers={"X-Visitor-Id": "not-a-uuid"},
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_create_repository_limit_reached_returns_429(client, monkeypatch):
+    monkeypatch.setattr(
+        router_module,
+        "import_repository",
+        AsyncMock(side_effect=RepositoryLimitReachedError("full")),
+    )
+
+    response = await client.post(
+        "/repositories",
+        json={"github_url": "https://github.com/octocat/Hello-World"},
+        headers=VISITOR_HEADERS,
+    )
+
+    assert response.status_code == 429
+
+
+@pytest.mark.anyio
+async def test_remove_from_my_list_returns_204(client, monkeypatch):
+    monkeypatch.setattr(
+        router_module, "remove_repository_from_visitor", AsyncMock(return_value=True)
+    )
+    _override_db(MagicMock())
+
+    response = await client.delete(
+        f"/repositories/{uuid.uuid4()}/membership", headers=VISITOR_HEADERS
+    )
+
+    assert response.status_code == 204
+
+
+@pytest.mark.anyio
+async def test_remove_from_my_list_not_in_list_returns_404(client, monkeypatch):
+    monkeypatch.setattr(
+        router_module, "remove_repository_from_visitor", AsyncMock(return_value=False)
+    )
+    _override_db(MagicMock())
+
+    response = await client.delete(
+        f"/repositories/{uuid.uuid4()}/membership", headers=VISITOR_HEADERS
+    )
+
+    assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------
@@ -285,7 +350,9 @@ async def test_create_repository_limit_reached_returns_429(client, monkeypatch):
     )
 
     response = await client.post(
-        "/repositories", json={"github_url": "https://github.com/octocat/Hello-World"}
+        "/repositories",
+        json={"github_url": "https://github.com/octocat/Hello-World"},
+        headers=VISITOR_HEADERS,
     )
 
     assert response.status_code == 429

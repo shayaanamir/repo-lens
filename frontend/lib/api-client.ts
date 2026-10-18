@@ -16,14 +16,44 @@ export class ApiError extends Error {
     }
 }
 
+const VISITOR_STORAGE_KEY = "repolens_visitor_id";
+let memoryVisitorId: string | null = null;
+
+/** Anonymous per-browser identity, kept in localStorage. If storage is
+ * blocked (some private modes), falls back to an id for this page load. */
+function getVisitorId(): string {
+    if (typeof window === "undefined") return "";
+    if (memoryVisitorId) return memoryVisitorId;
+    try {
+        const stored = window.localStorage.getItem(VISITOR_STORAGE_KEY);
+        if (stored) {
+            memoryVisitorId = stored;
+            return stored;
+        }
+    } catch {
+        // storage unavailable, fall through
+    }
+    const fresh = crypto.randomUUID();
+    memoryVisitorId = fresh;
+    try {
+        window.localStorage.setItem(VISITOR_STORAGE_KEY, fresh);
+    } catch {
+        // can't persist; the in-memory id still works for this session
+    }
+    return fresh;
+}
+
+
 async function request<T>(
     path: string,
     options: RequestInit = {}
 ): Promise<T> {
+    const visitorId = getVisitorId();
     const res = await fetch(`${API_BASE_URL}${path}`, {
         ...options,
         headers: {
             "Content-Type": "application/json",
+            ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
             ...options.headers,
         },
     });
@@ -263,7 +293,9 @@ export function listRepositories(): Promise<RepositoryListItem[]> {
 }
 
 export function deleteRepository(id: string): Promise<void> {
-    return request<void>(`/repositories/${id}`, { method: "DELETE" });
+    // Removes the repository from this visitor's list only; the backend
+    // purges its data once nobody else has it.
+    return request<void>(`/repositories/${id}/membership`, { method: "DELETE" });
 }
 
 export interface QAPair {

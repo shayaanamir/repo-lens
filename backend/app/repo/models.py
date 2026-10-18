@@ -46,3 +46,18 @@ class File(Base):
     repository: Mapped["Repository"] = relationship(back_populates="files")
     symbols: Mapped[list["Symbol"]] = relationship(back_populates="file", cascade="all, delete-orphan")
     content: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
+
+class VisitorRepository(Base):
+    """Which visitors have which repositories in their list."""
+    __tablename__ = "visitor_repository"
+
+    visitor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    repository_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("repository.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

@@ -9,7 +9,6 @@ from sqlalchemy.orm import undefer
 from app.core.config import settings
 from app.core.db import get_db
 from app.repo.git_service import CloneError
-from app.repo.models import File, Repository
 from app.repo.schemas import (
     FileContentOut,
     FileOut,
@@ -26,14 +25,17 @@ from app.repo.validators import InvalidRepoUrlError
 from app.search.qdrant_client import delete_repository_vectors
 from app.core.rate_limit import rate_limit
 from app.core.security import require_admin
+from app.core.visitor import get_visitor_id
+from app.repo.models import File, Repository, VisitorRepository
 from app.repo.service import (
     RepositoryAlreadyExistsError,
     RepositoryLimitReachedError,
+    VisitorLimitReachedError,
     import_repository,
+    purge_repository,
+    remove_repository_from_visitor,
 )
-
 router = APIRouter(prefix="/repositories", tags=["repositories"])
-
 
 @router.post(
     "",
@@ -45,15 +47,17 @@ router = APIRouter(prefix="/repositories", tags=["repositories"])
     ],
 )
 async def create_repository(
-    payload: RepositoryCreate, db: AsyncSession = Depends(get_db)
+    payload: RepositoryCreate,
+    visitor_id: UUID = Depends(get_visitor_id),
+    db: AsyncSession = Depends(get_db),
 ):
     try:
-        repository = await import_repository(db, payload.github_url)
+        repository = await import_repository(db, payload.github_url, visitor_id)
     except InvalidRepoUrlError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RepositoryAlreadyExistsError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
-    except RepositoryLimitReachedError as e:
+    except (VisitorLimitReachedError, RepositoryLimitReachedError) as e:
         raise HTTPException(status_code=429, detail=str(e)) from e
     except CloneError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
@@ -62,7 +66,9 @@ async def create_repository(
 
 
 @router.get("", response_model=list[RepositoryListItemOut])
-async def list_repositories(db: AsyncSession = Depends(get_db)):
+async def list_repositories(
+    visitor_id: UUID = Depends(get_visitor_id), db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(
         select(
             Repository.id,
@@ -73,7 +79,9 @@ async def list_repositories(db: AsyncSession = Depends(get_db)):
             Repository.imported_at,
             func.count(File.id).label("file_count"),
         )
+        .join(VisitorRepository, VisitorRepository.repository_id == Repository.id)
         .outerjoin(File, File.repository_id == Repository.id)
+        .where(VisitorRepository.visitor_id == visitor_id)
         .group_by(Repository.id)
         .order_by(Repository.imported_at.desc())
     )
@@ -95,16 +103,22 @@ async def list_repositories(db: AsyncSession = Depends(get_db)):
     "/{repository_id}", status_code=204, dependencies=[Depends(require_admin)]
 )
 async def delete_repository(repository_id: UUID, db: AsyncSession = Depends(get_db)):
-    repository = await db.get(Repository, repository_id)
-    if repository is None:
+    """Admin hard delete: removes the repository for every visitor."""
+    if not await purge_repository(db, repository_id):
         raise HTTPException(status_code=404, detail="Repository not found")
 
-    await db.delete(repository)
-    await db.commit()
 
-    # Postgres row is gone — now clean up what the DB cascade can't reach.
-    await delete_repository_vectors(repository_id)
-    shutil.rmtree(Path(settings.repo_storage_dir) / str(repository_id), ignore_errors=True)
+@router.delete("/{repository_id}/membership", status_code=204)
+async def remove_repository_from_my_list(
+    repository_id: UUID,
+    visitor_id: UUID = Depends(get_visitor_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Removes a repository from the calling visitor's list. Its data is
+    deleted only when no other visitor still has it."""
+    removed = await remove_repository_from_visitor(db, repository_id, visitor_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Repository not found in your list")
 
 
 @router.get("/{repository_id}", response_model=RepositoryOut)

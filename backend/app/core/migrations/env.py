@@ -16,7 +16,7 @@ sys.path.append(os.getcwd())
 
 from app.core.config import settings
 from app.core.db import Base
-from app.repo.models import Repository, File  # noqa: F401
+from app.repo.models import Repository, File, VisitorRepository  # noqa: F401
 from app.jobs.models import Job
 from app.analysis.models import Symbol, ImportEdge  # noqa: F401
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit

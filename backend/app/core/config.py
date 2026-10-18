@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"  # comma-separated list
     rate_limiting_enabled: bool = True
     max_repositories: int = 0          # 0 = unlimited (local dev)
+    max_repositories_per_visitor: int = 0   # 0 = unlimited (local dev)
     admin_token: str = ""              # empty = delete is open (local dev)
     ai_global_hourly_limit: int = 0    # 0 = unlimited (local dev)
 

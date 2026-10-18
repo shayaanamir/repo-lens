@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const EXAMPLE_REPOS = ["pallets/flask", "octocat/Hello-World", "tiangolo/fastapi"];
-const DELETE_DISABLED = process.env.NEXT_PUBLIC_DISABLE_DELETE === "true";
 
 /** Accepts "owner/repo" shorthand and expands it to a full GitHub URL,
  * so people can paste either form — the backend still validates the
@@ -289,7 +288,7 @@ function RepositoryList() {
 
   async function handleDelete(e: React.MouseEvent, id: string, name: string) {
     e.stopPropagation();
-    if (!window.confirm(`Delete "${name}"? This removes its indexed data and cannot be undone.`)) {
+    if (!window.confirm(`Remove "${name}" from your list?`)) {
       return;
     }
     setDeletingId(id);
@@ -297,7 +296,7 @@ function RepositoryList() {
       await deleteRepository(id);
       setRepos((prev) => prev?.filter((r) => r.id !== id) ?? null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : "Couldn't delete this repository.");
+      setError(err instanceof ApiError ? err.detail : "Couldn't remove this repository.");
     } finally {
       setDeletingId(null);
     }
@@ -350,21 +349,19 @@ function RepositoryList() {
 
             <div className="flex shrink-0 items-center gap-1">
               <ExternalLink className="h-3.5 w-3.5 text-[#8B98AC] opacity-0 transition-opacity group-hover:opacity-100" />
-              {!DELETE_DISABLED && (
-                <button
-                  type="button"
-                  onClick={(e) => handleDelete(e, repo.id, repo.name)}
-                  disabled={deletingId === repo.id}
-                  aria-label={`Delete ${repo.name}`}
-                  className="rounded p-1.5 text-[#8B98AC] transition-colors hover:bg-[#F2555C]/10 hover:text-[#F2555C] disabled:opacity-50"
-                >
-                  {deletingId === repo.id ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-3.5 w-3.5" />
-                  )}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={(e) => handleDelete(e, repo.id, repo.name)}
+                disabled={deletingId === repo.id}
+                aria-label={`Delete ${repo.name}`}
+                className="rounded p-1.5 text-[#8B98AC] transition-colors hover:bg-[#F2555C]/10 hover:text-[#F2555C] disabled:opacity-50"
+              >
+                {deletingId === repo.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+              </button>
             </div>
           </div>
         ))}
