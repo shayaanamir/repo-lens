@@ -263,11 +263,39 @@ function HeroIllustration() {
   );
 }
 
+function LoadingRepositories({ slow }: { slow: boolean }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="w-full rounded-xl border border-[#1E2C40] bg-[#121C2B]"
+    >
+      <div className="border-b border-[#1E2C40] px-4 py-3">
+        <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-widest text-[#5FD3C4]">
+          Your repositories
+        </p>
+      </div>
+      <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+        <Loader2 className="h-5 w-5 animate-spin text-[#5FD3C4]" />
+        <p className="font-[family-name:var(--font-mono)] text-xs text-[#ECE7D8]">
+          Loading repositories…
+        </p>
+        {slow && (
+          <p className="max-w-[260px] text-xs leading-relaxed text-[#8B98AC]">
+            The backend is waking up from sleep. The first load can take up to a minute.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RepositoryList() {
   const router = useRouter();
   const [repos, setRepos] = useState<RepositoryListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [slow, setSlow] = useState(false);
 
   async function load() {
     try {
@@ -281,6 +309,13 @@ function RepositoryList() {
   useEffect(() => {
     load();
   }, []);
+
+  // After 3s with no response, assume the backend is cold-starting and say so.
+  useEffect(() => {
+    if (repos !== null || error) return;
+    const timer = setTimeout(() => setSlow(true), 3000);
+    return () => clearTimeout(timer);
+  }, [repos, error]);
 
   function openRepo(id: string) {
     router.push(`/repo/${id}`);
@@ -308,7 +343,11 @@ function RepositoryList() {
 
   // Loading, or nothing imported yet — the illustration is a friendlier
   // hold than an empty box or a spinner in this slot.
-  if (repos === null || repos.length === 0) {
+  if (repos === null) {
+    return <LoadingRepositories slow={slow} />;
+  }
+
+  if (repos.length === 0) {
     return <HeroIllustration />;
   }
 
